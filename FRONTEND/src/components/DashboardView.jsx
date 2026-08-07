@@ -19,7 +19,7 @@ export default function DashboardView() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 overflow-y-auto h-full w-full">
       
       {/* Active Region Header Banner */}
       <div className="bg-[#151c28] border border-slate-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between shadow-lg gap-4">

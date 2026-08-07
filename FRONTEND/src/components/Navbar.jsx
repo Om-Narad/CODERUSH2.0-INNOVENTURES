@@ -135,7 +135,7 @@ export default function Navbar() {
         </div>
 
         {/* ── View Switcher Tabs (Dashboard | Map View | SOS Alerts) ────────── */}
-        <nav className="hidden sm:flex items-center bg-slate-900/90 p-1 rounded-xl border border-slate-800 shadow-inner">
+        <nav className="flex items-center bg-slate-900/90 p-1 rounded-xl border border-slate-800 shadow-inner">
           {/* Dashboard */}
           <button
             id="nav-dashboard-btn"

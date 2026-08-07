@@ -8,7 +8,6 @@ export default defineConfig({
   base: '/CODERUSH2.0-INNOVENTURES/',
 
   plugins: [react(), tailwindcss()],
-
   server: {
     host: true,
     port: 5173,
