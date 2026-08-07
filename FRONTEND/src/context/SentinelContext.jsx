@@ -7,7 +7,7 @@ import {
 } from '../data/mockData';
 
 const SentinelContext = createContext(null);
-const API_BASE_URL = '/api';
+const API_BASE_URL = 'https://coderush-2-0-innoventures-f9d6.vercel.app/api';
 
 export function normalizeRoad(r) {
   let coords = [];
@@ -307,7 +307,7 @@ export function SentinelProvider({ children }) {
     });
     if (!res.ok) {
       let detail = `Server error ${res.status}`;
-      try { detail = (await res.json()).detail || detail; } catch {}
+      try { detail = (await res.json()).detail || detail; } catch { }
       throw new Error(detail);
     }
     const result = await res.json();
