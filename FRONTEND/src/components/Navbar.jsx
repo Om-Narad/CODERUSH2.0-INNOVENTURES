@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useSentinel } from '../context/SentinelContext';
-import { Shield, LayoutDashboard, MapPin, AlertTriangle, Activity, Globe, ChevronDown, Check } from 'lucide-react';
+import { Shield, LayoutDashboard, MapPin, AlertTriangle, Activity, Globe, ChevronDown, Check, Siren } from 'lucide-react';
 
 export default function Navbar() {
   const {
@@ -10,11 +10,15 @@ export default function Navbar() {
     currentRegionId,
     currentRegionMeta,
     availableRegions,
-    switchRegion
+    switchRegion,
+    zones,
   } = useSentinel();
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
+
+  // Count of critical zones — used for SOS badge
+  const criticalZoneCount = zones.filter(z => z.severity === 'red').length;
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -130,8 +134,9 @@ export default function Navbar() {
           )}
         </div>
 
-        {/* View Switcher Tabs */}
+        {/* ── View Switcher Tabs (Dashboard | Map View | SOS Alerts) ────────── */}
         <nav className="hidden sm:flex items-center bg-slate-900/90 p-1 rounded-xl border border-slate-800 shadow-inner">
+          {/* Dashboard */}
           <button
             id="nav-dashboard-btn"
             onClick={() => setCurrentView('dashboard')}
@@ -145,6 +150,7 @@ export default function Navbar() {
             <span>Dashboard</span>
           </button>
 
+          {/* Map View */}
           <button
             id="nav-mapview-btn"
             onClick={() => setCurrentView('map')}
@@ -156,6 +162,26 @@ export default function Navbar() {
           >
             <MapPin className="w-3.5 h-3.5" />
             <span>Map View</span>
+          </button>
+
+          {/* SOS Alerts Tab (new) */}
+          <button
+            id="nav-sos-btn"
+            onClick={() => setCurrentView('sos')}
+            className={`relative flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 cursor-pointer ${
+              currentView === 'sos'
+                ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30 shadow-sm font-bold'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+            }`}
+          >
+            <Siren className="w-3.5 h-3.5" />
+            <span>SOS Alerts</span>
+            {/* Critical zone count badge */}
+            {criticalZoneCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 flex items-center justify-center rounded-full bg-rose-500 text-white text-[9px] font-black animate-pulse shadow-lg shadow-rose-700/50">
+                {criticalZoneCount}
+              </span>
+            )}
           </button>
         </nav>
 

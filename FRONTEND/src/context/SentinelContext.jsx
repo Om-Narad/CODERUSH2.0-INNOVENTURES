@@ -122,6 +122,12 @@ export function SentinelProvider({ children }) {
   const [apiOnline, setApiOnline] = useState(false);
   const [gdacsLiveFeed, setGdacsLiveFeed] = useState([]);
 
+  // ─── SOS Alert System State ────────────────────────────────────────────────
+  // sosAlerts: history of all SOS alerts sent (persisted during session)
+  const [sosAlerts, setSosAlerts] = useState([]);
+  // sosNotification: transient toast message shown after sending SOS
+  const [sosNotification, setSosNotification] = useState(null);
+
   // Fetch available regions at startup
   useEffect(() => {
     async function loadRegions() {
@@ -309,6 +315,103 @@ export function SentinelProvider({ children }) {
     return result;
   };
 
+  // ─── SOS Alert Functions ───────────────────────────────────────────────────
+
+  /**
+   * sendSosAlert — sends an SOS alert for a single zone.
+   * Creates a timestamped entry in sosAlerts history and shows a toast notification.
+   * @param {string} zoneId - The ID of the zone to alert
+   * @param {object[]} currentZones - The live computed zones array (passed in to avoid stale closure)
+   */
+  const sendSosAlert = useCallback((zoneId, currentZones) => {
+    const zone = (currentZones || []).find(z => z.id === zoneId);
+    if (!zone) return;
+
+    const timestamp = new Date().toLocaleTimeString('en-IN', { hour12: false });
+    const sosEntry = {
+      id: `sos-${Date.now()}-${zoneId}`,
+      zoneId,
+      zoneName: zone.name,
+      peopleExposed: zone.peopleExposed,
+      priority: zone.priority,
+      severity: zone.severity,
+      severityColor: zone.severityColor,
+      timestamp,
+      message: `SOS Alert dispatched to ${zone.peopleExposed.toLocaleString()} residents in ${zone.name}`,
+    };
+
+    // Add to SOS history
+    setSosAlerts(prev => [sosEntry, ...prev]);
+
+    // Show toast notification (auto-dismiss after 4 seconds)
+    setSosNotification({
+      id: sosEntry.id,
+      zoneName: zone.name,
+      peopleExposed: zone.peopleExposed,
+    });
+    setTimeout(() => {
+      setSosNotification(null);
+    }, 4000);
+
+    // Add to the main system alerts log as well
+    const systemAlert = {
+      id: `alert-sos-${Date.now()}`,
+      timestamp,
+      message: `🚨 SOS ALERT SENT — ${zone.name} (Priority ${zone.priority}): Notifying ${zone.peopleExposed.toLocaleString()} residents to evacuate immediately.`,
+      type: 'critical',
+    };
+    setAlerts(prev => [systemAlert, ...prev]);
+  }, []);
+
+  /**
+   * sendMassSos — sends SOS alerts to all Critical (red severity) zones at once.
+   */
+  const sendMassSos = useCallback((currentZones) => {
+    const criticalZones = (currentZones || []).filter(z => z.severity === 'red');
+    if (criticalZones.length === 0) return;
+
+    const timestamp = new Date().toLocaleTimeString('en-IN', { hour12: false });
+    const newSosEntries = criticalZones.map(zone => ({
+      id: `sos-mass-${Date.now()}-${zone.id}`,
+      zoneId: zone.id,
+      zoneName: zone.name,
+      peopleExposed: zone.peopleExposed,
+      priority: zone.priority,
+      severity: zone.severity,
+      severityColor: zone.severityColor,
+      timestamp,
+      message: `MASS SOS: Alert dispatched to ${zone.peopleExposed.toLocaleString()} residents in ${zone.name}`,
+      isMassAlert: true,
+    }));
+
+    setSosAlerts(prev => [...newSosEntries, ...prev]);
+
+    const totalPeople = criticalZones.reduce((sum, z) => sum + z.peopleExposed, 0);
+    setSosNotification({
+      id: `mass-${Date.now()}`,
+      zoneName: `ALL ${criticalZones.length} Critical Zones`,
+      peopleExposed: totalPeople,
+      isMass: true,
+    });
+    setTimeout(() => setSosNotification(null), 5000);
+
+    // Add mass SOS to main alerts log
+    const systemAlert = {
+      id: `alert-mass-sos-${Date.now()}`,
+      timestamp,
+      message: `🚨 MASS SOS DISPATCHED — ${criticalZones.length} critical zones, ${totalPeople.toLocaleString()} residents alerted across ${criticalZones.map(z => z.name).join(', ')}.`,
+      type: 'critical',
+    };
+    setAlerts(prev => [systemAlert, ...prev]);
+  }, []);
+
+  /**
+   * dismissSosNotification — manually dismiss the SOS toast.
+   */
+  const dismissSosNotification = useCallback(() => {
+    setSosNotification(null);
+  }, []);
+
   return (
     <SentinelContext.Provider
       value={{
@@ -329,6 +432,12 @@ export function SentinelProvider({ children }) {
         assignResponders,
         predictFlood,
         apiOnline,
+        // SOS Alert System
+        sosAlerts,
+        sosNotification,
+        sendSosAlert,
+        sendMassSos,
+        dismissSosNotification,
       }}
     >
       {children}
