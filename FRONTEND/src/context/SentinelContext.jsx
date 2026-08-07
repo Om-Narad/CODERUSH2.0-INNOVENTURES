@@ -7,7 +7,13 @@ import {
 } from '../data/mockData';
 
 const SentinelContext = createContext(null);
-const API_BASE_URL = 'https://coderush-2-0-innoventures-f9d6.vercel.app/api';
+// PRODUCTION FIX: Read API base URL from Vite env variable.
+// On localhost the vite.config.js proxy rewrites /api → http://127.0.0.1:8000
+// so we can safely use a relative /api prefix in dev as well.
+// Set VITE_API_URL on Vercel dashboard: https://coderush2-0-innoventures.onrender.com/api
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL ||
+  'https://coderush2-0-innoventures.onrender.com/api';
 
 export function normalizeRoad(r) {
   let coords = [];
