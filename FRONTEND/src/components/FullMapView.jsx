@@ -25,13 +25,7 @@ import {
   Layers,
 } from 'lucide-react';
 
-const getMaplib = () => {
-  try {
-    return maplibregl?.default || maplibregl;
-  } catch {
-    return null;
-  }
-};
+const getMaplib = () => maplibregl;
 
 // ─── GeoJSON Helpers ──────────────────────────────────────────────────────────
 
