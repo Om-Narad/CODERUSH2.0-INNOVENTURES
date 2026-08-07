@@ -5,25 +5,36 @@ import PriorityActionFeed from './PriorityActionFeed';
 import { DENSITY_HEATMAP_POINTS } from '../data/mockData';
 import { AlertTriangle, PanelRightClose, PanelRightOpen, Navigation, Info } from 'lucide-react';
 
-// Helper component to fit map bounds tightly around all zone polygons on load
-function FitBoundsComponent({ zones }) {
+// Helper component to fit map bounds tightly around all zone polygons when region or zones change
+function FitBoundsComponent({ zones, regionMeta }) {
   const map = useMap();
 
   useEffect(() => {
+    if (regionMeta?.center) {
+      map.setView(regionMeta.center, regionMeta.zoom || 12);
+    }
     if (!zones || zones.length === 0) return;
 
     let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+    let valid = false;
     zones.forEach(z => {
-      z.geometry.forEach(([lat, lng]) => {
-        if (lat < minLat) minLat = lat;
-        if (lat > maxLat) maxLat = lat;
-        if (lng < minLng) minLng = lng;
-        if (lng > maxLng) maxLng = lng;
-      });
+      if (Array.isArray(z.geometry)) {
+        z.geometry.forEach(([lat, lng]) => {
+          if (typeof lat === 'number' && typeof lng === 'number') {
+            valid = true;
+            if (lat < minLat) minLat = lat;
+            if (lat > maxLat) maxLat = lat;
+            if (lng < minLng) minLng = lng;
+            if (lng > maxLng) maxLng = lng;
+          }
+        });
+      }
     });
 
-    map.fitBounds([[minLat, minLng], [maxLat, maxLng]], { padding: [50, 50] });
-  }, [map]);
+    if (valid && minLat < maxLat && minLng < maxLng) {
+      map.fitBounds([[minLat, minLng], [maxLat, maxLng]], { padding: [50, 50] });
+    }
+  }, [map, zones, regionMeta]);
 
   return null;
 }
@@ -32,6 +43,7 @@ export default function FullMapView() {
   const {
     zones,
     roads,
+    currentRegionMeta,
     selectedZoneId,
     setSelectedZoneId,
     toggleRoadStatus,
@@ -40,8 +52,9 @@ export default function FullMapView() {
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  // Center fallback around Guwahati Assam Brahmaputra valley
-  const center = [26.185, 91.742];
+  // Dynamic center based on active region
+  const center = currentRegionMeta?.center || [26.185, 91.742];
+  const zoom = currentRegionMeta?.zoom || 12;
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden bg-[#0b0f17]">
@@ -105,7 +118,7 @@ export default function FullMapView() {
             />
 
             {/* Automatically fit bounds around all zone polygons on load */}
-            <FitBoundsComponent zones={zones} />
+            <FitBoundsComponent zones={zones} regionMeta={currentRegionMeta} />
 
             {/* Population Density Heat Overlay Circles */}
             {DENSITY_HEATMAP_POINTS.map((pt, idx) => (

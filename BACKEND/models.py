@@ -37,3 +37,14 @@ class PredictionResponse(BaseModel):
     label: str          # "Flood" or "No Flood"
     confidence: float   # 0.0 – 1.0
     flood_probability: float  # raw softmax probability for flood class
+
+class RegionInfo(BaseModel):
+    id: str
+    name: str
+    country: str
+    center: List[float]  # [lat, lng]
+    zoom: int
+    hazard_level: str    # "Critical", "High", "Moderate", "Watch"
+    description: str
+    alert_count: int
+

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import {
   INITIAL_ZONES,
   INITIAL_ROADS,
@@ -104,40 +104,74 @@ export function computeZonePriority(zone, roadsList) {
 
 export function SentinelProvider({ children }) {
   const [currentView, setCurrentView] = useState('dashboard');
+  const [currentRegionId, setCurrentRegionId] = useState('assam');
+  const [currentRegionMeta, setCurrentRegionMeta] = useState({
+    id: 'assam',
+    name: 'Guwahati & Brahmaputra Basin',
+    country: 'India',
+    center: [26.185, 91.745],
+    zoom: 12,
+    hazard_level: 'Critical'
+  });
+  const [availableRegions, setAvailableRegions] = useState([]);
   const [roads, setRoads] = useState(() => INITIAL_ROADS.map(normalizeRoad));
   const [alerts, setAlerts] = useState(INITIAL_ALERTS);
   const [stats, setStats] = useState(INITIAL_STATS);
   const [selectedZoneId, setSelectedZoneId] = useState(null);
   const [rawZones, setRawZones] = useState(() => INITIAL_ZONES.map((z, idx) => normalizeZone(z, idx)));
   const [apiOnline, setApiOnline] = useState(false);
+  const [gdacsLiveFeed, setGdacsLiveFeed] = useState([]);
 
+  // Fetch available regions at startup
   useEffect(() => {
-    async function fetchState() {
+    async function loadRegions() {
       try {
-        const res = await fetch(`${API_BASE_URL}/state`);
+        const res = await fetch(`${API_BASE_URL}/regions`);
         if (res.ok) {
-          const data = await res.json();
-          if (data.zones && data.roads) {
-            setApiOnline(true);
-            setRoads(data.roads.map(normalizeRoad));
-            setAlerts(data.alerts);
-            if (data.stats) {
-              setStats({
-                respondersDeployed: data.stats.responders_deployed ?? data.stats.respondersDeployed,
-                respondersAvailable: data.stats.responders_available ?? data.stats.respondersAvailable,
-                sheltersAtCapacity: data.stats.shelters_at_capacity ?? data.stats.sheltersAtCapacity,
-                sheltersTotal: data.stats.shelters_total ?? data.stats.sheltersTotal,
-              });
-            }
-            setRawZones(data.zones.map((z, idx) => normalizeZone(z, idx)));
-          }
+          const list = await res.json();
+          setAvailableRegions(list);
         }
-      } catch (err) {
-        console.warn('Backend API offline, operating in client fallback mode.', err);
+      } catch (e) {
+        console.warn('Could not fetch regions list from API', e);
       }
     }
-    fetchState();
+    loadRegions();
   }, []);
+
+  // Fetch state for active region
+  const fetchStateForRegion = useCallback(async (regionId) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/state?region=${regionId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setApiOnline(true);
+        if (data.region) setCurrentRegionMeta(data.region);
+        if (data.zones && data.roads) {
+          setRoads(data.roads.map(normalizeRoad));
+          setAlerts(data.alerts);
+          if (data.stats) {
+            setStats({
+              respondersDeployed: data.stats.responders_deployed ?? data.stats.respondersDeployed,
+              respondersAvailable: data.stats.responders_available ?? data.stats.respondersAvailable,
+              sheltersAtCapacity: data.stats.shelters_at_capacity ?? data.stats.sheltersAtCapacity,
+              sheltersTotal: data.stats.shelters_total ?? data.stats.sheltersTotal,
+            });
+          }
+          setRawZones(data.zones.map((z, idx) => normalizeZone(z, idx)));
+        }
+      }
+    } catch (err) {
+      console.warn('Backend API offline, operating in client fallback mode.', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchStateForRegion(currentRegionId);
+  }, [currentRegionId, fetchStateForRegion]);
+
+  const switchRegion = (regionId) => {
+    setCurrentRegionId(regionId);
+  };
 
   const zones = useMemo(() => {
     return rawZones
@@ -153,7 +187,7 @@ export function SentinelProvider({ children }) {
   const toggleRoadStatus = async (roadId) => {
     if (apiOnline) {
       try {
-        const res = await fetch(`${API_BASE_URL}/roads/${roadId}/toggle`, { method: 'POST' });
+        const res = await fetch(`${API_BASE_URL}/roads/${roadId}/toggle?region=${currentRegionId}`, { method: 'POST' });
         if (res.ok) {
           const data = await res.json();
           setRoads(data.roads.map(normalizeRoad));
@@ -192,7 +226,7 @@ export function SentinelProvider({ children }) {
   const simulateRoadBlock = async () => {
     if (apiOnline) {
       try {
-        const res = await fetch(`${API_BASE_URL}/simulate`, { method: 'POST' });
+        const res = await fetch(`${API_BASE_URL}/simulate?region=${currentRegionId}`, { method: 'POST' });
         if (res.ok) {
           const data = await res.json();
           setRoads(data.roads.map(normalizeRoad));
@@ -204,36 +238,16 @@ export function SentinelProvider({ children }) {
       }
     }
 
-    const road2 = roads.find(r => r.id === 'road-2');
-    const road1 = roads.find(r => r.id === 'road-1');
-
-    if (road2 && road2.status === 'open') {
-      toggleRoadStatus('road-2');
-    } else if (road1 && road1.status === 'open') {
-      toggleRoadStatus('road-1');
-    } else {
-      const openRoad = roads.find(r => r.status === 'open');
-      if (openRoad) {
-        toggleRoadStatus(openRoad.id);
-      } else {
-        setRoads(INITIAL_ROADS.map(normalizeRoad));
-        setAlerts(prev => [
-          {
-            id: `alert-${Date.now()}`,
-            timestamp: getFormattedTime(),
-            message: `${getFormattedTime()} — Demo Reset: All Brahmaputra evacuation routes reopened`,
-            type: 'info',
-          },
-          ...prev,
-        ]);
-      }
+    const firstRoad = roads[0];
+    if (firstRoad) {
+      toggleRoadStatus(firstRoad.id);
     }
   };
 
   const assignResponders = async (zoneId) => {
     if (apiOnline) {
       try {
-        const res = await fetch(`${API_BASE_URL}/zones/${zoneId}/assign`, { method: 'POST' });
+        const res = await fetch(`${API_BASE_URL}/zones/${zoneId}/assign?region=${currentRegionId}`, { method: 'POST' });
         if (res.ok) {
           const data = await res.json();
           setAlerts(data.alerts);
@@ -265,57 +279,23 @@ export function SentinelProvider({ children }) {
       }
     }
 
-    let newlyAssignedCount = 0;
-    let zoneName = '';
-    let isNowAssigned = false;
-
     setRawZones(prevZones =>
       prevZones.map(z => {
         if (z.id === zoneId) {
-          zoneName = z.name;
-          isNowAssigned = z.status !== 'Assigned';
-          newlyAssignedCount = z.recommendedResponders;
           return {
             ...z,
-            status: isNowAssigned ? 'Assigned' : 'Pending',
-            assignedSquad: isNowAssigned
-              ? `${z.assignedSquad.split(' ')[0]} ${z.assignedSquad.split(' ')[1]} (Deployed)`
-              : `${z.assignedSquad.split(' ')[0]} ${z.assignedSquad.split(' ')[1]} (Standby)`,
-            assignedRespondersCount: isNowAssigned ? z.recommendedResponders : 0,
+            status: z.status === 'Assigned' ? 'Pending' : 'Assigned',
           };
         }
         return z;
       })
     );
-
-    setStats(prev => {
-      const delta = isNowAssigned ? newlyAssignedCount : -newlyAssignedCount;
-      return {
-        ...prev,
-        respondersDeployed: Math.max(0, prev.respondersDeployed + delta),
-      };
-    });
-
-    const newAlert = {
-      id: `alert-${Date.now()}`,
-      timestamp: getFormattedTime(),
-      message: isNowAssigned
-        ? `${getFormattedTime()} — Responders Deployed: ${newlyAssignedCount} units dispatched to ${zoneName}`
-        : `${getFormattedTime()} — Responders Unassigned from ${zoneName}`,
-      type: isNowAssigned ? 'success' : 'info',
-    };
-    setAlerts(prev => [newAlert, ...prev]);
   };
 
-  /**
-   * predictFlood — Sends an image File to POST /api/predict
-   * Returns: { label: "Flood"|"No Flood", confidence: number, flood_probability: number }
-   * Throws an Error with a human-readable message on failure.
-   */
   const predictFlood = async (imageFile) => {
     const formData = new FormData();
     formData.append('file', imageFile);
-    const res = await fetch(`${API_BASE_URL}/predict`, {
+    const res = await fetch(`${API_BASE_URL}/predict?region=${currentRegionId}`, {
       method: 'POST',
       body: formData,
     });
@@ -324,7 +304,9 @@ export function SentinelProvider({ children }) {
       try { detail = (await res.json()).detail || detail; } catch {}
       throw new Error(detail);
     }
-    return await res.json(); // { label, confidence, flood_probability }
+    const result = await res.json();
+    fetchStateForRegion(currentRegionId);
+    return result;
   };
 
   return (
@@ -332,6 +314,10 @@ export function SentinelProvider({ children }) {
       value={{
         currentView,
         setCurrentView,
+        currentRegionId,
+        currentRegionMeta,
+        availableRegions,
+        switchRegion,
         zones,
         roads,
         alerts,

@@ -3,33 +3,43 @@ import { useSentinel } from '../context/SentinelContext';
 import { MapContainer, TileLayer, Polygon, Polyline, useMap } from 'react-leaflet';
 import { Maximize2, MapPin } from 'lucide-react';
 
-function FitMiniBounds({ zones }) {
+function FitMiniBounds({ zones, regionMeta }) {
   const map = useMap();
 
   useEffect(() => {
+    if (regionMeta?.center) {
+      map.setView(regionMeta.center, regionMeta.zoom || 12);
+    }
     if (!zones || zones.length === 0) return;
 
     let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+    let valid = false;
     zones.forEach(z => {
-      z.geometry.forEach(([lat, lng]) => {
-        if (lat < minLat) minLat = lat;
-        if (lat > maxLat) maxLat = lat;
-        if (lng < minLng) minLng = lng;
-        if (lng > maxLng) maxLng = lng;
-      });
+      if (Array.isArray(z.geometry)) {
+        z.geometry.forEach(([lat, lng]) => {
+          if (typeof lat === 'number' && typeof lng === 'number') {
+            valid = true;
+            if (lat < minLat) minLat = lat;
+            if (lat > maxLat) maxLat = lat;
+            if (lng < minLng) minLng = lng;
+            if (lng > maxLng) maxLng = lng;
+          }
+        });
+      }
     });
 
-    map.fitBounds([[minLat, minLng], [maxLat, maxLng]], { padding: [30, 30] });
-  }, [map]);
+    if (valid && minLat < maxLat && minLng < maxLng) {
+      map.fitBounds([[minLat, minLng], [maxLat, maxLng]], { padding: [30, 30] });
+    }
+  }, [map, zones, regionMeta]);
 
   return null;
 }
 
 export default function MiniPreviewMap() {
-  const { zones, roads, setCurrentView } = useSentinel();
+  const { zones, roads, currentRegionMeta, setCurrentView } = useSentinel();
 
-  // Fallback center for Assam region
-  const center = [26.185, 91.742];
+  const center = currentRegionMeta?.center || [26.185, 91.742];
 
   return (
     <div className="bg-[#151c28] border border-slate-800 rounded-xl p-4 flex flex-col h-full shadow-lg relative group">
@@ -42,7 +52,7 @@ export default function MiniPreviewMap() {
           </div>
           <div>
             <h2 className="text-sm font-bold text-white tracking-wide uppercase">Zone Preview Map</h2>
-            <p className="text-[11px] text-slate-400">Assam Sector Hazard Polygons</p>
+            <p className="text-[11px] text-slate-400">{currentRegionMeta?.name || 'Assam Sector'} Polygons</p>
           </div>
         </div>
         <button
@@ -76,7 +86,7 @@ export default function MiniPreviewMap() {
             subdomains="abcd"
           />
 
-          <FitMiniBounds zones={zones} />
+          <FitMiniBounds zones={zones} regionMeta={currentRegionMeta} />
 
           {/* Draw Roads */}
           {roads.map(road => (
@@ -85,7 +95,7 @@ export default function MiniPreviewMap() {
               positions={road.geometry}
               pathOptions={{
                 color: road.status === 'open' ? '#38bdf8' : '#ef4444',
-                weight: road.status === 'open' ? 3 : 3,
+                weight: 3,
                 dashArray: road.status === 'open' ? null : '6, 6',
                 opacity: 0.85,
               }}
