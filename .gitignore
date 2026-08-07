@@ -1,0 +1,159 @@
+# ============================================================
+#  CODERUSH 2.0 — INNOVENTURES  |  .gitignore
+# ============================================================
+
+# ------------------------------------------------------------
+# Python (Backend)
+# ------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+*.pyo
+*.pyw
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.env
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+*.egg
+MANIFEST
+site/
+
+# Unit test / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.coveragerc
+.tox/
+.nox/
+
+# MyPy / Pyright type stubs cache
+.mypy_cache/
+.pytype/
+.pyre/
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ------------------------------------------------------------
+# Node.js / Vite (Frontend)
+# ------------------------------------------------------------
+node_modules/
+.npm/
+.yarn/
+yarn-error.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json.bak
+
+# Vite build output & cache
+FRONTEND/dist/
+dist/
+.vite/
+
+# Parcel cache
+.parcel-cache/
+
+# TypeScript build info
+*.tsbuildinfo
+
+# ------------------------------------------------------------
+# Environment & Secrets
+# ------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.json
+config.local.*
+
+# ------------------------------------------------------------
+# IDEs & Editors
+# ------------------------------------------------------------
+# VS Code
+.vscode/
+!.vscode/extensions.json
+
+# JetBrains (PyCharm, WebStorm, etc.)
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim / Neovim
+*.swp
+*.swo
+*~
+
+# Eclipse
+.project
+.classpath
+.settings/
+
+# ------------------------------------------------------------
+# Operating System
+# ------------------------------------------------------------
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+Desktop.ini
+$RECYCLE.BIN/
+ehthumbs.db
+
+# Linux
+*~
+
+# ------------------------------------------------------------
+# Logs & Temporary Files
+# ------------------------------------------------------------
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+*.bak
+*.swp
+*.cache
+
+# ------------------------------------------------------------
+# Database / Data Files (if local)
+# ------------------------------------------------------------
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+
+# ------------------------------------------------------------
+# Miscellaneous
+# ------------------------------------------------------------
+*.zip
+*.tar.gz
+*.rar
+.history/
