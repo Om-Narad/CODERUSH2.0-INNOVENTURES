@@ -58,7 +58,7 @@ export default function FullMapView() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden bg-[#0b0f17]">
-      
+
       {/* Top Banner Control Bar */}
       <div className="bg-[#151c28] border-b border-slate-800 px-4 py-2.5 flex items-center justify-between z-10 shadow-md">
         <div className="flex items-center space-x-3">
@@ -99,12 +99,13 @@ export default function FullMapView() {
 
       {/* Main Container: Map + Collapsible Sidebar */}
       <div className="flex-1 flex relative overflow-hidden">
-        
+
         {/* Full-Screen Interactive Leaflet Map */}
         <div className="flex-1 h-full relative">
           <MapContainer
+            key={currentRegionMeta?.id || 'default'}
             center={center}
-            zoom={13}
+            zoom={zoom}
             minZoom={11}
             maxZoom={18}
             zoomControl={true}
@@ -211,11 +212,10 @@ export default function FullMapView() {
                         </div>
                         <button
                           onClick={() => toggleRoadStatus(road.id)}
-                          className={`w-full mt-2 py-1.5 rounded text-xs font-bold transition-all ${
-                            isBlocked
-                              ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
-                              : 'bg-rose-500 hover:bg-rose-400 text-white'
-                          }`}
+                          className={`w-full mt-2 py-1.5 rounded text-xs font-bold transition-all ${isBlocked
+                            ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
+                            : 'bg-rose-500 hover:bg-rose-400 text-white'
+                            }`}
                         >
                           {isBlocked ? 'Re-open Road' : 'Mark Road Blocked'}
                         </button>
