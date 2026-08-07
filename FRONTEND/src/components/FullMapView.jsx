@@ -1,9 +1,12 @@
 /**
  * FullMapView.jsx — SentinelPlan Interactive 3D/2D Map View
  * ─────────────────────────────────────────────────────────────────────────────
- * Provides a full-screen interactive disaster response map.
- * Supports both 3D Photorealistic Satellite mode (MapLibre GL JS) and
- * 2D Tactical Vector mode (Leaflet) with seamless switching & WebGL fallback.
+ * Fixes for zero-height and re-initialization loops:
+ *  - Explicit container height style={{ height: "calc(100vh - 64px)" }}
+ *  - Primitive regionId dependency to prevent infinite cleanup/destruction loops
+ *  - Clean map initialization & cleanup on tab mount/unmount
+ *  - Dual 3D Satellite (MapLibre) and 2D Tactical (Leaflet) view modes
+ *  - Visible debug status indicator UI
  */
 import React, { useEffect, useRef, useState } from 'react';
 import * as maplibregl from 'maplibre-gl';
@@ -22,7 +25,6 @@ import {
   Siren,
   ShieldAlert,
   Loader2,
-  RefreshCw,
   Box,
   Layers,
 } from 'lucide-react';
@@ -192,6 +194,7 @@ export default function FullMapView() {
     setSelectedZoneId,
     toggleRoadStatus,
     simulateRoadBlock,
+    sosAlerts,
   } = useSentinel();
 
   const mapContainerRef = useRef(null);
@@ -213,21 +216,32 @@ export default function FullMapView() {
 
   const criticalZoneCount = zones.filter(z => z.severity === 'red').length;
   const center = currentRegionMeta?.center || [26.185, 91.745];
+  const regionId = currentRegionMeta?.id || 'assam';
 
   // ── Initialize MapLibre 3D Map ─────────────────────────────────────────────
   useEffect(() => {
     if (mapMode !== '3d') return;
-    if (mapRef.current) return;
+    if (!mapContainerRef.current) return;
 
     // Check WebGL support
     if (!maplib.supported()) {
-      setMapError('WebGL is not supported on this browser/device. Switched to 2D Tactical View.');
+      setMapError('WebGL is not supported on this browser/device. Auto-switching to 2D Tactical View.');
       setMapMode('2d');
       setIsMapLoading(false);
       return;
     }
 
     try {
+      // Destroy old instance if any exists
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+        mapReadyRef.current = false;
+      }
+
+      setIsMapLoading(true);
+      setMapError(null);
+
       const lngLat = [center[1], center[0]];
 
       const map = new maplib.Map({
@@ -244,7 +258,7 @@ export default function FullMapView() {
 
       mapRef.current = map;
 
-      // Add Controls
+      // Add Navigation Controls
       map.addControl(new maplib.NavigationControl({ visualizePitch: true }), 'top-right');
       map.addControl(new maplib.ScaleControl({ unit: 'metric' }), 'bottom-right');
       map.addControl(new maplib.FullscreenControl(), 'top-right');
@@ -483,9 +497,8 @@ export default function FullMapView() {
       resizeObserver.observe(mapContainerRef.current);
     }
 
-    // Scheduled resizes after mount to catch tab-switch reflow
     const timer1 = setTimeout(() => mapRef.current?.resize(), 100);
-    const timer2 = setTimeout(() => mapRef.current?.resize(), 350);
+    const timer2 = setTimeout(() => mapRef.current?.resize(), 300);
 
     return () => {
       clearTimeout(timer1);
@@ -497,7 +510,9 @@ export default function FullMapView() {
         mapReadyRef.current = false;
       }
     };
-  }, [mapMode, center, currentRegionMeta]);
+    // Primitive regionId dependency prevents teardown loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapMode, regionId]);
 
   // Sync MapLibre 3D map layers when zones or roads change
   useEffect(() => {
@@ -567,7 +582,15 @@ export default function FullMapView() {
   };
 
   return (
-    <div className="flex flex-col flex-1 w-full h-full min-h-[calc(100vh-4rem)] overflow-hidden bg-[#0b0f17]">
+    <div
+      style={{ height: 'calc(100vh - 64px)', minHeight: 'calc(100vh - 64px)' }}
+      className="h-[calc(100vh-64px)] w-full flex flex-col relative overflow-hidden bg-[#0b0f17]"
+    >
+      {/* ── Debug / Status Indicator UI ────────────────────────────────────── */}
+      <div className="absolute top-16 left-4 z-40 bg-[#0f1419]/90 border border-cyan-500/40 text-cyan-300 text-xs px-3 py-1.5 rounded-xl backdrop-blur-md shadow-2xl font-mono flex items-center space-x-2 pointer-events-none">
+        <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+        <span>Map View loaded – initializing map...</span>
+      </div>
 
       {/* Top Banner Control Bar */}
       <div className="bg-[#151c28] border-b border-slate-800 px-4 py-2.5 flex items-center justify-between z-10 shadow-md flex-shrink-0">
@@ -627,19 +650,25 @@ export default function FullMapView() {
       </div>
 
       {/* ── Main Layout: Map Canvas + Right Sidebar ─────────────────────────── */}
-      <div className="flex-1 flex relative overflow-hidden min-h-[450px]">
+      <div className="flex-1 flex relative overflow-hidden h-full w-full">
 
         {/* Map Container */}
-        <div className="flex-1 h-full relative w-full overflow-hidden">
-
+        <div
+          style={{ height: '100%', width: '100%' }}
+          className="flex-1 h-full relative w-full overflow-hidden"
+        >
           {/* MODE 1: 3D MapLibre Satellite View */}
           {mapMode === '3d' && (
-            <div ref={mapContainerRef} className="absolute inset-0 w-full h-full min-h-full" />
+            <div
+              ref={mapContainerRef}
+              style={{ height: '100%', width: '100%' }}
+              className="absolute inset-0 w-full h-full min-h-full"
+            />
           )}
 
           {/* MODE 2: 2D Tactical Leaflet View */}
           {mapMode === '2d' && (
-            <div className="absolute inset-0 w-full h-full">
+            <div style={{ height: '100%', width: '100%' }} className="absolute inset-0 w-full h-full">
               <MapContainer
                 center={center}
                 zoom={currentRegionMeta?.zoom || 12}
@@ -723,7 +752,7 @@ export default function FullMapView() {
                 </span>
               </div>
               <div className="text-center space-y-1">
-                <h3 className="text-sm font-bold text-white tracking-wide">Loading 3D Map View…</h3>
+                <h3 className="text-sm font-bold text-white tracking-wide">Map View loaded – initializing map...</h3>
                 <p className="text-xs text-slate-400">ESRI Satellite Imagery · AWS DEM 3D Terrain ({currentRegionMeta?.name || 'Assam'})</p>
               </div>
             </div>

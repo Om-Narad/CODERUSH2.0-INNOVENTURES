@@ -9,9 +9,9 @@ function MainContent() {
   const { currentView } = useSentinel();
 
   return (
-    <div className="min-h-screen bg-[#0b0f17] text-slate-100 flex flex-col selection:bg-cyan-500 selection:text-white">
+    <div className="h-screen w-screen bg-[#0b0f17] text-slate-100 flex flex-col overflow-hidden selection:bg-cyan-500 selection:text-white">
       <Navbar />
-      <main className="flex-1 flex flex-col relative overflow-hidden">
+      <main className="flex-1 flex flex-col relative overflow-hidden h-[calc(100vh-64px)] w-full">
         {currentView === 'dashboard' && <DashboardView />}
         {currentView === 'map' && <FullMapView />}
         {currentView === 'sos' && <SOSAlertsPanel />}
