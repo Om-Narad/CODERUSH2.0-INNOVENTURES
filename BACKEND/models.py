@@ -32,3 +32,8 @@ class Stats(BaseModel):
 
 class AssignSquadRequest(BaseModel):
     squad_name: Optional[str] = None
+
+class PredictionResponse(BaseModel):
+    label: str          # "Flood" or "No Flood"
+    confidence: float   # 0.0 – 1.0
+    flood_probability: float  # raw softmax probability for flood class

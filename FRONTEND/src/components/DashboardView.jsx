@@ -4,6 +4,7 @@ import PriorityActionFeed from './PriorityActionFeed';
 import MiniPreviewMap from './MiniPreviewMap';
 import AlertsLog from './AlertsLog';
 import ResourceTable from './ResourceTable';
+import FloodDetector from './FloodDetector';
 
 export default function DashboardView() {
   return (
@@ -35,6 +36,10 @@ export default function DashboardView() {
       {/* Bottom: Resource Allocation Table */}
       <ResourceTable />
 
+      {/* AI Flood Detection Panel */}
+      <FloodDetector />
+
     </div>
   );
 }
+
