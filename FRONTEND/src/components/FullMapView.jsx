@@ -1,18 +1,16 @@
 /**
- * FullMapView.jsx — SentinelPlan Photorealistic 3D Map
+ * FullMapView.jsx — SentinelPlan Interactive 3D/2D Map View
  * ─────────────────────────────────────────────────────────────────────────────
- * Replaces the flat Leaflet map with a MapLibre GL JS 3D satellite terrain map.
- *
- * PROD FIXES APPLIED:
- *  - Removed non-standard `type: 'sky'` layer which threw 'Unknown layer type sky' in MapLibre GL JS v4+
- *  - Added WebGL capability check via maplibregl.supported() to catch unsupported devices/browsers
- *  - Added clear loading overlay state and error fallback card
- *  - Explicit full container height (h-full w-full min-h-[calc(100vh-4rem)]) with auto resize handling
- *  - Reactive region flyTo and GeoJSON dataset synchronization on region updates
+ * Provides a full-screen interactive disaster response map.
+ * Supports both 3D Photorealistic Satellite mode (MapLibre GL JS) and
+ * 2D Tactical Vector mode (Leaflet) with seamless switching & WebGL fallback.
  */
 import React, { useEffect, useRef, useState } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { MapContainer, TileLayer, Polygon, Polyline, useMap } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+
 import { useSentinel } from '../context/SentinelContext';
 import PriorityActionFeed from './PriorityActionFeed';
 import { DENSITY_HEATMAP_POINTS } from '../data/mockData';
@@ -25,6 +23,8 @@ import {
   ShieldAlert,
   Loader2,
   RefreshCw,
+  Box,
+  Layers,
 } from 'lucide-react';
 
 const maplib = maplibregl;
@@ -139,6 +139,48 @@ function buildMapStyle() {
   };
 }
 
+// ─── Leaflet Helper Component for 2D Map Auto-fitting ─────────────────────────
+
+function LeafletMapViewUpdater({ center, zoom, zones }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (center) {
+      map.setView(center, zoom || 12);
+    }
+
+    if (zones && zones.length > 0) {
+      let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+      let valid = false;
+      zones.forEach(z => {
+        if (Array.isArray(z.geometry)) {
+          z.geometry.forEach(([lat, lng]) => {
+            if (typeof lat === 'number' && typeof lng === 'number') {
+              valid = true;
+              if (lat < minLat) minLat = lat;
+              if (lat > maxLat) maxLat = lat;
+              if (lng < minLng) minLng = lng;
+              if (lng > maxLng) maxLng = lng;
+            }
+          });
+        }
+      });
+      if (valid && minLat < maxLat && minLng < maxLng) {
+        map.fitBounds([[minLat, minLng], [maxLat, maxLng]], { padding: [40, 40] });
+      }
+    }
+  }, [map, center, zoom, zones]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      map.invalidateSize();
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [map]);
+
+  return null;
+}
+
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function FullMapView() {
@@ -150,7 +192,6 @@ export default function FullMapView() {
     setSelectedZoneId,
     toggleRoadStatus,
     simulateRoadBlock,
-    sosAlerts,
   } = useSentinel();
 
   const mapContainerRef = useRef(null);
@@ -158,29 +199,35 @@ export default function FullMapView() {
   const mapReadyRef = useRef(false);
   const popupRef = useRef(null);
 
+  // Map Mode: '3d' | '2d'
+  const [mapMode, setMapMode] = useState('3d');
+
+  // Sidebar state
   const [sidebarTab, setSidebarTab] = useState('feed');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [hoveredFeature, setHoveredFeature] = useState(null);
 
-  // PROD FIX: Loading state & WebGL error handling state
+  // Loading & WebGL error handling state
   const [isMapLoading, setIsMapLoading] = useState(true);
   const [mapError, setMapError] = useState(null);
 
   const criticalZoneCount = zones.filter(z => z.severity === 'red').length;
+  const center = currentRegionMeta?.center || [26.185, 91.745];
 
-  // ── Initialize Map ────────────────────────────────────────────────────────
+  // ── Initialize MapLibre 3D Map ─────────────────────────────────────────────
   useEffect(() => {
+    if (mapMode !== '3d') return;
     if (mapRef.current) return;
 
-    // PROD FIX: Check WebGL support before creating map
+    // Check WebGL support
     if (!maplib.supported()) {
-      setMapError('WebGL is not supported or context was lost in your browser.');
+      setMapError('WebGL is not supported on this browser/device. Switched to 2D Tactical View.');
+      setMapMode('2d');
       setIsMapLoading(false);
       return;
     }
 
     try {
-      const center = currentRegionMeta?.center || [26.185, 91.745];
       const lngLat = [center[1], center[0]];
 
       const map = new maplib.Map({
@@ -197,17 +244,15 @@ export default function FullMapView() {
 
       mapRef.current = map;
 
-      // Controls
+      // Add Controls
       map.addControl(new maplib.NavigationControl({ visualizePitch: true }), 'top-right');
       map.addControl(new maplib.ScaleControl({ unit: 'metric' }), 'bottom-right');
       map.addControl(new maplib.FullscreenControl(), 'top-right');
 
-      // Error handler
       map.on('error', (e) => {
         console.warn('MapLibre runtime notice:', e?.error?.message || e);
       });
 
-      // PROD FIX: Load handler (no sky layer to prevent unknown layer type crash)
       map.on('load', () => {
         try {
           // 3D Terrain DEM exaggeration
@@ -216,7 +261,7 @@ export default function FullMapView() {
             exaggeration: 2.0,
           });
 
-          // Zones source + fill & line layers
+          // Zones source + fill & outline layers
           map.addSource('zones', {
             type: 'geojson',
             data: zonesToGeoJSON(zones),
@@ -294,7 +339,7 @@ export default function FullMapView() {
             },
           });
 
-          // Roads source + hit & line layers
+          // Roads source + line layers
           map.addSource('roads', {
             type: 'geojson',
             data: roadsToGeoJSON(roads),
@@ -414,10 +459,12 @@ export default function FullMapView() {
 
           mapReadyRef.current = true;
           setIsMapLoading(false);
-          map.resize();
+
+          // Force canvas resize after mount
+          requestAnimationFrame(() => map.resize());
         } catch (err) {
-          console.error('Error adding map layers:', err);
-          setMapError('Failed to initialize map data layers.');
+          console.error('Error adding 3D map layers:', err);
+          setMapError('Failed to initialize 3D map data layers.');
           setIsMapLoading(false);
         }
       });
@@ -427,68 +474,56 @@ export default function FullMapView() {
       setIsMapLoading(false);
     }
 
-    // PROD FIX: Auto-resize on window resize
-    const handleResize = () => {
+    // ResizeObserver ensures canvas updates when container size changes
+    const resizeObserver = new ResizeObserver(() => {
       if (mapRef.current) mapRef.current.resize();
-    };
-    window.addEventListener('resize', handleResize);
+    });
+
+    if (mapContainerRef.current) {
+      resizeObserver.observe(mapContainerRef.current);
+    }
+
+    // Scheduled resizes after mount to catch tab-switch reflow
+    const timer1 = setTimeout(() => mapRef.current?.resize(), 100);
+    const timer2 = setTimeout(() => mapRef.current?.resize(), 350);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      resizeObserver.disconnect();
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
         mapReadyRef.current = false;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [mapMode, center, currentRegionMeta]);
 
-  // PROD FIX: Trigger map resize when sidebar toggles
+  // Sync MapLibre 3D map layers when zones or roads change
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (mapRef.current) mapRef.current.resize();
-    }, 200);
-    return () => clearTimeout(timer);
-  }, [sidebarOpen]);
-
-  // ── Sync zones GeoJSON when zones change ───────────────────────────────────
-  useEffect(() => {
+    if (mapMode !== '3d') return;
     const map = mapRef.current;
     if (!map || !mapReadyRef.current) return;
-    const source = map.getSource('zones');
-    if (source) {
-      source.setData(zonesToGeoJSON(zones));
-    }
+
+    const zSource = map.getSource('zones');
+    if (zSource) zSource.setData(zonesToGeoJSON(zones));
+
+    const rSource = map.getSource('roads');
+    if (rSource) rSource.setData(roadsToGeoJSON(roads));
+
     if (selectedZoneId) {
       map.setFilter('zones-selected', ['==', ['get', 'id'], selectedZoneId]);
     } else {
       map.setFilter('zones-selected', ['==', ['get', 'id'], '']);
     }
-  }, [zones, selectedZoneId]);
+  }, [mapMode, zones, roads, selectedZoneId]);
 
-  // ── Sync roads GeoJSON when roads change ───────────────────────────────────
+  // FlyTo camera on region update
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReadyRef.current) return;
-    const source = map.getSource('roads');
-    if (source) {
-      source.setData(roadsToGeoJSON(roads));
-    }
-  }, [roads]);
-
-  // PROD FIX: Smooth flyTo & data update when region changes
-  useEffect(() => {
+    if (mapMode !== '3d') return;
     const map = mapRef.current;
     if (!map || !currentRegionMeta?.center) return;
     const [lat, lng] = currentRegionMeta.center;
-
-    if (mapReadyRef.current) {
-      const zSource = map.getSource('zones');
-      if (zSource) zSource.setData(zonesToGeoJSON(zones));
-      const rSource = map.getSource('roads');
-      if (rSource) rSource.setData(roadsToGeoJSON(roads));
-    }
 
     map.flyTo({
       center: [lng, lat],
@@ -499,7 +534,15 @@ export default function FullMapView() {
       curve: 1.2,
       essential: true,
     });
-  }, [currentRegionMeta, zones, roads]);
+  }, [mapMode, currentRegionMeta]);
+
+  // Trigger resize when sidebar toggles
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (mapRef.current) mapRef.current.resize();
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [sidebarOpen]);
 
   const handleTabClick = (tab) => {
     if (sidebarTab === tab && sidebarOpen) {
@@ -510,36 +553,56 @@ export default function FullMapView() {
     }
   };
 
-  const handleRetryMap = () => {
-    setMapError(null);
+  const switchMapMode = (mode) => {
+    if (mode === mapMode) return;
     setIsMapLoading(true);
+    setMapError(null);
     if (mapRef.current) {
       mapRef.current.remove();
       mapRef.current = null;
       mapReadyRef.current = false;
     }
-    // Force re-mount trigger
-    window.location.reload();
+    setMapMode(mode);
+    setTimeout(() => setIsMapLoading(false), 200);
   };
 
   return (
     <div className="flex flex-col flex-1 w-full h-full min-h-[calc(100vh-4rem)] overflow-hidden bg-[#0b0f17]">
 
       {/* Top Banner Control Bar */}
-      <div className="bg-[#151c28] border-b border-slate-800 px-4 py-2.5 flex items-center justify-between z-10 shadow-md">
+      <div className="bg-[#151c28] border-b border-slate-800 px-4 py-2.5 flex items-center justify-between z-10 shadow-md flex-shrink-0">
         <div className="flex items-center space-x-3">
           <div className="flex items-center space-x-2 bg-slate-900 px-3 py-1 rounded-lg border border-slate-800 text-xs">
             <Info className="w-4 h-4 text-cyan-400" />
             <span className="text-slate-300">
-              <strong className="text-white">3D Photorealistic Map:</strong> Click roads to block/open · Drag to rotate · Scroll to zoom · Right-drag to tilt
+              <strong className="text-white">{mapMode === '3d' ? '3D Photorealistic Map' : '2D Tactical View'}:</strong> Click roads to toggle open/blocked · Click zones to view status
             </span>
           </div>
 
-          <div className="hidden md:flex items-center space-x-4 text-xs text-slate-400">
-            <span>
-              Roads: <strong className="text-cyan-400">{roads.filter(r => r.status === 'open').length} Open</strong>{' '}
-              / <strong className="text-rose-400">{roads.filter(r => r.status === 'blocked').length} Blocked</strong>
-            </span>
+          {/* Map Mode Switcher Toggle */}
+          <div className="flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-800 text-xs">
+            <button
+              onClick={() => switchMapMode('3d')}
+              className={`flex items-center space-x-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                mapMode === '3d'
+                  ? 'bg-cyan-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Box className="w-3.5 h-3.5" />
+              <span>3D Satellite</span>
+            </button>
+            <button
+              onClick={() => switchMapMode('2d')}
+              className={`flex items-center space-x-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                mapMode === '2d'
+                  ? 'bg-cyan-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>2D Tactical</span>
+            </button>
           </div>
         </div>
 
@@ -563,17 +626,92 @@ export default function FullMapView() {
         </div>
       </div>
 
-      {/* ── Main: Map + Sidebar ─────────────────────────────────────────────── */}
-      <div className="flex-1 flex relative overflow-hidden min-h-[500px]">
+      {/* ── Main Layout: Map Canvas + Right Sidebar ─────────────────────────── */}
+      <div className="flex-1 flex relative overflow-hidden min-h-[450px]">
 
         {/* Map Container */}
-        <div className="flex-1 h-full relative w-full">
+        <div className="flex-1 h-full relative w-full overflow-hidden">
 
-          {/* MapLibre Canvas Mount */}
-          <div ref={mapContainerRef} className="absolute inset-0 w-full h-full" />
+          {/* MODE 1: 3D MapLibre Satellite View */}
+          {mapMode === '3d' && (
+            <div ref={mapContainerRef} className="absolute inset-0 w-full h-full min-h-full" />
+          )}
 
-          {/* PROD FIX: Loading Overlay */}
-          {isMapLoading && !mapError && (
+          {/* MODE 2: 2D Tactical Leaflet View */}
+          {mapMode === '2d' && (
+            <div className="absolute inset-0 w-full h-full">
+              <MapContainer
+                center={center}
+                zoom={currentRegionMeta?.zoom || 12}
+                minZoom={5}
+                maxZoom={18}
+                zoomControl={true}
+                scrollWheelZoom={true}
+                className="h-full w-full bg-[#0b0f17]"
+              >
+                <TileLayer
+                  url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                  subdomains="abcd"
+                  attribution="© CartoDB"
+                />
+
+                <LeafletMapViewUpdater center={center} zoom={currentRegionMeta?.zoom} zones={zones} />
+
+                {/* Draw Roads in 2D Mode */}
+                {roads.map(road => {
+                  const isBlocked = road.status === 'blocked';
+                  return (
+                    <Polyline
+                      key={road.id}
+                      positions={road.geometry}
+                      eventHandlers={{
+                        click: () => toggleRoadStatus(road.id),
+                        mouseover: () => setHoveredFeature({ type: 'road', name: road.name, status: road.status }),
+                        mouseout: () => setHoveredFeature(null),
+                      }}
+                      pathOptions={{
+                        color: isBlocked ? '#ef4444' : '#38bdf8',
+                        weight: isBlocked ? 5 : 4,
+                        dashArray: isBlocked ? '6, 8' : null,
+                        opacity: 0.9,
+                      }}
+                    />
+                  );
+                })}
+
+                {/* Draw Zones in 2D Mode */}
+                {zones.map(zone => {
+                  const isSelected = selectedZoneId === zone.id;
+                  return (
+                    <Polygon
+                      key={zone.id}
+                      positions={zone.geometry}
+                      eventHandlers={{
+                        click: () => setSelectedZoneId(zone.id),
+                        mouseover: () => setHoveredFeature({
+                          type: 'zone',
+                          name: zone.name,
+                          priority: zone.priority,
+                          peopleExposed: zone.peopleExposed,
+                          severityColor: zone.severityColor,
+                        }),
+                        mouseout: () => setHoveredFeature(null),
+                      }}
+                      pathOptions={{
+                        color: isSelected ? '#38bdf8' : zone.severityColor,
+                        fillColor: zone.severityColor,
+                        fillOpacity: zone.severity === 'red' ? 0.45 : zone.severity === 'amber' ? 0.3 : 0.2,
+                        weight: isSelected ? 4 : 2,
+                      }}
+                    />
+                  );
+                })}
+              </MapContainer>
+            </div>
+          )}
+
+          {/* Loading Overlay */}
+          {isMapLoading && !mapError && mapMode === '3d' && (
             <div className="absolute inset-0 z-30 bg-[#0b0f17]/90 backdrop-blur-md flex flex-col items-center justify-center space-y-4">
               <div className="relative">
                 <div className="w-16 h-16 rounded-full border-2 border-cyan-900 flex items-center justify-center">
@@ -585,29 +723,29 @@ export default function FullMapView() {
                 </span>
               </div>
               <div className="text-center space-y-1">
-                <h3 className="text-sm font-bold text-white tracking-wide">Loading 3D Photorealistic Map…</h3>
+                <h3 className="text-sm font-bold text-white tracking-wide">Loading 3D Map View…</h3>
                 <p className="text-xs text-slate-400">ESRI Satellite Imagery · AWS DEM 3D Terrain ({currentRegionMeta?.name || 'Assam'})</p>
               </div>
             </div>
           )}
 
-          {/* PROD FIX: Error Fallback Card */}
-          {mapError && (
+          {/* Error Fallback Overlay */}
+          {mapError && mapMode === '3d' && (
             <div className="absolute inset-0 z-30 bg-[#0b0f17]/95 backdrop-blur-lg flex flex-col items-center justify-center p-6 text-center">
-              <div className="max-w-md bg-[#151c28] border border-rose-800/60 p-6 rounded-2xl shadow-2xl space-y-4">
-                <div className="p-3 bg-rose-950/60 rounded-full inline-block text-rose-400 border border-rose-800/50">
+              <div className="max-w-md bg-[#151c28] border border-amber-800/60 p-6 rounded-2xl shadow-2xl space-y-4">
+                <div className="p-3 bg-amber-950/60 rounded-full inline-block text-amber-400 border border-amber-800/50">
                   <AlertTriangle className="w-8 h-8" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">3D Map Failed to Load</h3>
+                  <h3 className="text-base font-bold text-white">3D Map Notice</h3>
                   <p className="text-xs text-slate-300 mt-2">{mapError}</p>
                 </div>
                 <button
-                  onClick={handleRetryMap}
+                  onClick={() => switchMapMode('2d')}
                   className="inline-flex items-center space-x-2 px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shadow-lg transition-all cursor-pointer"
                 >
-                  <RefreshCw className="w-4 h-4" />
-                  <span>Reload Map Renderer</span>
+                  <Layers className="w-4 h-4" />
+                  <span>Switch to 2D Tactical View</span>
                 </button>
               </div>
             </div>
@@ -659,16 +797,12 @@ export default function FullMapView() {
                 <span className="w-4 h-1 bg-rose-500 rounded border border-dashed border-rose-300 inline-block"></span>
                 <span>Blocked / Submerged Route</span>
               </div>
-              <div className="flex items-center space-x-2 pt-1 border-t border-slate-800">
-                <span className="w-3 h-3 rounded-full bg-amber-500 opacity-60 inline-block"></span>
-                <span>Population Density</span>
-              </div>
             </div>
           </div>
 
-          {/* 3D Mode Badge */}
+          {/* Map Mode Badge */}
           <div className="absolute top-4 right-16 z-10 bg-cyan-950/80 border border-cyan-800/60 text-cyan-300 text-[10px] font-bold px-2.5 py-1 rounded-full backdrop-blur-sm uppercase tracking-wider">
-            3D Terrain Active
+            {mapMode === '3d' ? '3D Satellite Active' : '2D Tactical Active'}
           </div>
         </div>
 
