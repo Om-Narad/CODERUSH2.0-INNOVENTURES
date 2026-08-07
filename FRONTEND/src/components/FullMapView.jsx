@@ -14,23 +14,20 @@
  *  - Sidebar tabs: Priority Action Feed | SOS Alerts
  *  - All state updates via setData() — no map re-mount on re-render
  */
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 // MapLibre GL JS v4+ ESM build uses named exports — import namespace
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useSentinel } from '../context/SentinelContext';
 import PriorityActionFeed from './PriorityActionFeed';
-import SOSAlertsPanel from './SOSAlertsPanel';
 import { DENSITY_HEATMAP_POINTS } from '../data/mockData';
 import {
   AlertTriangle,
   PanelRightClose,
   PanelRightOpen,
   Info,
-  Navigation,
   Siren,
   ShieldAlert,
-  Activity,
 } from 'lucide-react';
 
 // ─── GeoJSON Helpers ──────────────────────────────────────────────────────────
@@ -535,14 +532,14 @@ export default function FullMapView() {
       {/* Top Banner Control Bar */}
       <div className="bg-[#151c28] border-b border-slate-800 px-4 py-2.5 flex items-center justify-between z-10 shadow-md">
         <div className="flex items-center space-x-3">
-          <div className="flex items-center space-x-2 bg-slate-900 px-3 py-1 rounded-lg border border-slate-800 text-xs font-mono-numeric">
+          <div className="flex items-center space-x-2 bg-slate-900 px-3 py-1 rounded-lg border border-slate-800 text-xs">
             <Info className="w-4 h-4 text-cyan-400" />
             <span className="text-slate-300">
-              <strong className="text-white font-sans">3D Photorealistic Map:</strong> Click roads to block/open · Drag to rotate · Scroll to zoom · Right-drag to tilt
+              <strong className="text-white">3D Photorealistic Map:</strong> Click roads to block/open · Drag to rotate · Scroll to zoom · Right-drag to tilt
             </span>
           </div>
 
-          <div className="hidden md:flex items-center space-x-4 text-xs font-mono-numeric text-slate-400">
+          <div className="hidden md:flex items-center space-x-4 text-xs text-slate-400">
             <span>
               Roads: <strong className="text-cyan-400">{roads.filter(r => r.status === 'open').length} Open</strong>{' '}
               / <strong className="text-rose-400">{roads.filter(r => r.status === 'blocked').length} Blocked</strong>
@@ -575,252 +572,123 @@ export default function FullMapView() {
       {/* ── Main: Map + Sidebar ─────────────────────────────────────────────── */}
       <div className="flex-1 flex relative overflow-hidden">
 
-        {/* Full-Screen Interactive Leaflet Map */}
+        {/* MapLibre GL JS Map Container */}
         <div className="flex-1 h-full relative">
-          <MapContainer
-            center={center}
-            zoom={13}
-            minZoom={11}
-            maxZoom={18}
-            zoomControl={true}
-            className="h-full w-full"
-          >
-            <TileLayer
-              url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-              subdomains="abcd"
-              maxZoom={19}
-              attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-            />
 
-            {/* Automatically fit bounds around all zone polygons on load */}
-            <FitBoundsComponent zones={zones} regionMeta={currentRegionMeta} />
+          {/* The MapLibre map renders into this div via ref */}
+          <div ref={mapContainerRef} className="absolute inset-0 w-full h-full" />
 
-            {/* Population Density Heat Overlay Circles */}
-            {DENSITY_HEATMAP_POINTS.map((pt, idx) => (
-              <React.Fragment key={`heat-${idx}`}>
-                <CircleMarker
-                  center={[pt.lat, pt.lng]}
-                  radius={36 * pt.intensity}
-                  pathOptions={{
-                    color: '#ef4444',
-                    fillColor: '#ef4444',
-                    fillOpacity: 0.18 * pt.intensity,
-                    weight: 1,
-                  }}
-                />
-                <CircleMarker
-                  center={[pt.lat, pt.lng]}
-                  radius={12 * pt.intensity}
-                  pathOptions={{
-                    color: '#f59e0b',
-                    fillColor: '#f59e0b',
-                    fillOpacity: 0.45 * pt.intensity,
-                    weight: 0,
-                  }}
-                >
-                  <Tooltip permanent={false} direction="top">
-                    <div className="text-xs font-mono-numeric">
-                      <strong>{pt.label}</strong> (Density Index: {Math.round(pt.intensity * 100)}%)
-                    </div>
-                  </Tooltip>
-                </CircleMarker>
-              </React.Fragment>
-            ))}
-
-            {/* Draw Roads (Dual Polylines: Invisible Wide Click Target + Visible Line) */}
-            {roads.map(road => {
-              const isBlocked = road.status === 'blocked';
-              return (
-                <React.Fragment key={road.id}>
-                  {/* Invisible Wide Hit-Target for Easy Clicking */}
-                  <Polyline
-                    positions={road.geometry}
-                    eventHandlers={{
-                      click: () => toggleRoadStatus(road.id),
-                    }}
-                    pathOptions={{
-                      color: '#ffffff',
-                      weight: 24,
-                      opacity: 0.001,
-                      className: 'cursor-pointer',
-                    }}
-                  />
-
-                  {/* Visible Styled Road Line */}
-                  <Polyline
-                    positions={road.geometry}
-                    eventHandlers={{
-                      click: () => toggleRoadStatus(road.id),
-                    }}
-                    pathOptions={{
-                      color: isBlocked ? '#ef4444' : '#38bdf8',
-                      weight: isBlocked ? 5 : 5,
-                      dashArray: isBlocked ? '8, 10' : null,
-                      opacity: 0.95,
-                      className: isBlocked ? 'road-blocked-dash cursor-pointer' : 'cursor-pointer',
-                    }}
-                  >
-                    <Tooltip sticky direction="top">
-                      <div className="p-1 font-sans text-xs">
-                        <div className="flex items-center space-x-1 font-bold text-white">
-                          <Navigation className="w-3.5 h-3.5 text-cyan-400" />
-                          <span>{road.name}</span>
-                        </div>
-                        <div className="mt-1 flex items-center justify-between text-[11px] font-mono-numeric">
-                          <span className="text-slate-400">Status:</span>
-                          <span className={isBlocked ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold'}>
-                            {isBlocked ? '⛔ BLOCKED (Click to Open)' : '✅ OPEN (Click to Block)'}
-                          </span>
-                        </div>
-                      </div>
-                    </Tooltip>
-                    <Popup>
-                      <div className="p-2 text-xs space-y-2">
-                        <h4 className="font-bold text-white text-sm">{road.name}</h4>
-                        <p className="text-slate-300">Type: {road.type}</p>
-                        <div className="pt-2 border-t border-slate-700 flex items-center justify-between">
-                          <span className="text-slate-400">Current State:</span>
-                          <span className={isBlocked ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold'}>
-                            {road.status.toUpperCase()}
-                          </span>
-                        </div>
-                        <button
-                          onClick={() => toggleRoadStatus(road.id)}
-                          className={`w-full mt-2 py-1.5 rounded text-xs font-bold transition-all ${isBlocked
-                              ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
-                              : 'bg-rose-500 hover:bg-rose-400 text-white'
-                            }`}
-                        >
-                          {isBlocked ? 'Re-open Road' : 'Mark Road Blocked'}
-                        </button>
-                      </div>
-                    </Popup>
-                  </Polyline>
-                </React.Fragment>
-              );
-            })}
-
-            {/* Draw Zone Polygons */}
-            {zones.map(zone => {
-              const isSelected = selectedZoneId === zone.id;
-              return (
-                <Polygon
-                  key={zone.id}
-                  positions={zone.geometry}
-                  eventHandlers={{
-                    click: () => setSelectedZoneId(zone.id),
-                  }}
-                  pathOptions={{
-                    color: zone.severityColor,
-                    fillColor: zone.severityColor,
-                    fillOpacity: isSelected ? 0.65 : zone.severity === 'red' ? 0.45 : zone.severity === 'amber' ? 0.35 : 0.25,
-                    weight: isSelected ? 4 : 2,
-                    dashArray: isSelected ? '4, 4' : null,
-                  }}
-                >
-                  <Tooltip sticky direction="center">
-                    <div className="p-1 text-xs font-sans">
-                      <div className="font-bold text-white text-sm">{zone.name}</div>
-                      <div className="text-slate-300 mt-0.5 font-mono-numeric">
-                        Priority Score: <strong style={{ color: zone.severityColor }}>{zone.priority}</strong>
-                      </div>
-                      <div className="text-slate-400 text-[11px]">
-                        Exposed: {zone.peopleExposed.toLocaleString()} people
-                      </div>
-                    </div>
+          {/* ── Hover Tooltip Overlay ─────────────────────────────────────── */}
+          {hoveredFeature && (
+            <div className="absolute bottom-16 left-4 z-20 bg-[#0f1419]/95 border border-slate-700 p-3 rounded-xl backdrop-blur-md shadow-2xl text-xs pointer-events-none">
+              {hoveredFeature.type === 'road' ? (
+                <div className="space-y-1">
+                  <div className="font-bold text-white">{hoveredFeature.name}</div>
+                  <div className={`font-semibold ${hoveredFeature.status === 'blocked' ? 'text-rose-400' : 'text-cyan-400'}`}>
+                    {hoveredFeature.status === 'blocked' ? '⛔ BLOCKED' : '✅ OPEN'} · Click to toggle
                   </div>
-                )}
                 </div>
+              ) : (
+                <div className="space-y-1">
+                  <div className="font-bold text-white">{hoveredFeature.name}</div>
+                  <div className="text-slate-300">
+                    Priority: <strong style={{ color: hoveredFeature.severityColor }}>{hoveredFeature.priority}</strong>
+                  </div>
+                  <div className="text-slate-400">{hoveredFeature.peopleExposed?.toLocaleString()} people exposed</div>
+                </div>
+              )}
             </div>
           )}
 
-        {/* ── Map Legend ───────────────────────────────────────────────── */}
-        <div className="absolute bottom-10 left-4 z-10 bg-[#0f1419]/92 border border-slate-800 p-3 rounded-xl backdrop-blur-md shadow-2xl text-xs space-y-2">
-          <h4 className="font-bold text-white uppercase text-[10px] tracking-wider text-slate-400">Map Legend</h4>
-          <div className="space-y-1.5 text-slate-300 font-mono-numeric">
-            <div className="flex items-center space-x-2">
-              <span className="w-3 h-3 rounded-full bg-rose-500 animate-pulse"></span>
-              <span>Critical Zone (Score ≥ 75)</span>
+          {/* ── Map Legend ───────────────────────────────────────────────── */}
+          <div className="absolute bottom-10 left-4 z-10 bg-[#0f1419]/90 border border-slate-800 p-3 rounded-xl backdrop-blur-md shadow-2xl text-xs space-y-2">
+            <h4 className="font-bold text-slate-400 uppercase text-[10px] tracking-wider">Map Legend</h4>
+            <div className="space-y-1.5 text-slate-300">
+              <div className="flex items-center space-x-2">
+                <span className="w-3 h-3 rounded-full bg-rose-500 animate-pulse inline-block"></span>
+                <span>Critical Zone (Score ≥ 75)</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="w-3 h-3 rounded-full bg-amber-500 inline-block"></span>
+                <span>Warning Zone (Score 50–74)</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span>
+                <span>Stable Zone (Score &lt; 50)</span>
+              </div>
+              <div className="flex items-center space-x-2 pt-1 border-t border-slate-800">
+                <span className="w-4 h-1 bg-cyan-400 rounded inline-block"></span>
+                <span>Open Evacuation Route</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="w-4 h-1 bg-rose-500 rounded border border-dashed border-rose-300 inline-block"></span>
+                <span>Blocked / Submerged Route</span>
+              </div>
+              <div className="flex items-center space-x-2 pt-1 border-t border-slate-800">
+                <span className="w-3 h-3 rounded-full bg-amber-500 opacity-60 inline-block"></span>
+                <span>Population Density</span>
+              </div>
             </div>
-            <div className="flex items-center space-x-2">
-              <span className="w-3 h-3 rounded-full bg-amber-500"></span>
-              <span>Warning Zone (Score 50–74)</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <span className="w-3 h-3 rounded-full bg-emerald-500"></span>
-              <span>Stable Zone (Score &lt; 50)</span>
-            </div>
-            <div className="flex items-center space-x-2 pt-1 border-t border-slate-800">
-              <span className="w-4 h-1 bg-cyan-400 rounded"></span>
-              <span>Open Evacuation Route</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <span className="w-4 h-1 bg-rose-500 rounded border border-dashed border-rose-300"></span>
-              <span>Blocked / Submerged Route</span>
-            </div>
-            <div className="flex items-center space-x-2 pt-1 border-t border-slate-800">
-              <span className="w-3 h-3 rounded-full bg-amber-500 opacity-60"></span>
-              <span>Population Density</span>
-            </div>
+          </div>
+
+          {/* ── 3D Mode Badge ────────────────────────────────────────────── */}
+          <div className="absolute top-4 right-16 z-10 bg-cyan-950/80 border border-cyan-800/60 text-cyan-300 text-[10px] font-bold px-2.5 py-1 rounded-full backdrop-blur-sm uppercase tracking-wider">
+            3D Terrain Active
           </div>
         </div>
 
-        {/* ── 3D Mode Badge ────────────────────────────────────────────── */}
-        <div className="absolute top-4 right-16 z-10 bg-cyan-950/80 border border-cyan-800/60 text-cyan-300 text-[10px] font-bold px-2.5 py-1 rounded-full backdrop-blur-sm uppercase tracking-wider">
-          3D Terrain Active
-        </div>
-      </div>
+        {/* ── Collapsible Right Sidebar ────────────────────────────────────── */}
+        {sidebarOpen && (
+          <div className="w-96 h-full border-l border-slate-800 bg-[#0b0f17] flex flex-col z-10 shadow-2xl flex-shrink-0">
 
-      {/* ── Collapsible Right Sidebar ────────────────────────────────────── */}
-      {sidebarOpen && (
-        <div className="w-96 h-full border-l border-slate-800 bg-[#0b0f17] flex flex-col z-10 shadow-2xl flex-shrink-0">
-
-          {/* Sidebar Tab Bar */}
-          <div className="flex border-b border-slate-800 bg-[#151c28] flex-shrink-0">
-            {/* Priority Feed Tab */}
-            <button
-              onClick={() => handleTabClick('feed')}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[11px] font-bold uppercase tracking-wide transition-all cursor-pointer ${sidebarTab === 'feed'
-                  ? 'text-cyan-300 border-b-2 border-cyan-400 bg-cyan-950/20'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
+            {/* Sidebar Tab Bar */}
+            <div className="flex border-b border-slate-800 bg-[#151c28] flex-shrink-0">
+              {/* Priority Feed Tab */}
+              <button
+                onClick={() => handleTabClick('feed')}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[11px] font-bold uppercase tracking-wide transition-all cursor-pointer ${
+                  sidebarTab === 'feed'
+                    ? 'text-cyan-300 border-b-2 border-cyan-400 bg-cyan-950/20'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
                 }`}
-            >
-              <ShieldAlert className="w-3.5 h-3.5" />
-              <span>Priority Feed</span>
-            </button>
+              >
+                <ShieldAlert className="w-3.5 h-3.5" />
+                <span>Priority Feed</span>
+              </button>
 
-            {/* SOS Alerts Tab */}
-            <button
-              onClick={() => handleTabClick('sos')}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[11px] font-bold uppercase tracking-wide transition-all cursor-pointer relative ${sidebarTab === 'sos'
-                  ? 'text-rose-300 border-b-2 border-rose-400 bg-rose-950/20'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
+              {/* SOS Alerts Tab */}
+              <button
+                onClick={() => handleTabClick('sos')}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[11px] font-bold uppercase tracking-wide transition-all cursor-pointer relative ${
+                  sidebarTab === 'sos'
+                    ? 'text-rose-300 border-b-2 border-rose-400 bg-rose-950/20'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
                 }`}
-            >
-              <Siren className="w-3.5 h-3.5" />
-              <span>SOS Alerts</span>
-              {/* Critical count badge */}
-              {criticalZoneCount > 0 && (
-                <span className="absolute top-1.5 right-6 w-4 h-4 flex items-center justify-center rounded-full bg-rose-500 text-white text-[9px] font-black animate-pulse">
-                  {criticalZoneCount}
-                </span>
+              >
+                <Siren className="w-3.5 h-3.5" />
+                <span>SOS Alerts</span>
+                {/* Critical count badge */}
+                {criticalZoneCount > 0 && (
+                  <span className="absolute top-1.5 right-6 w-4 h-4 flex items-center justify-center rounded-full bg-rose-500 text-white text-[9px] font-black animate-pulse">
+                    {criticalZoneCount}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* Sidebar Content */}
+            <div className="flex-1 overflow-y-auto p-3">
+              {sidebarTab === 'feed' ? (
+                <PriorityActionFeed />
+              ) : (
+                /* Compact SOS panel for sidebar — only critical zones + history */
+                <SidebarSosPanel />
               )}
-            </button>
+            </div>
           </div>
-
-          {/* Sidebar Content */}
-          <div className="flex-1 overflow-y-auto p-3">
-            {sidebarTab === 'feed' ? (
-              <PriorityActionFeed />
-            ) : (
-              /* Compact SOS panel for sidebar — only critical zones + history */
-              <SidebarSosPanel />
-            )}
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
-    </div >
   );
 }
 
@@ -867,12 +735,13 @@ function SidebarSosPanel() {
         id="sidebar-mass-sos-btn"
         onClick={handleMassSos}
         disabled={massSending || criticalZones.length === 0}
-        className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95 border ${massSending
+        className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95 border ${
+          massSending
             ? 'bg-emerald-700/20 border-emerald-600/40 text-emerald-300 cursor-not-allowed'
             : criticalZones.length === 0
               ? 'bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed'
               : 'bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white border-rose-500/40 shadow-lg shadow-rose-900/30 cursor-pointer'
-          }`}
+        }`}
       >
         <Siren className="w-3.5 h-3.5" />
         {massSending ? 'Mass SOS Dispatched!' : `Send Mass SOS (${criticalZones.length} Critical Zones)`}
@@ -888,17 +757,18 @@ function SidebarSosPanel() {
           return (
             <div
               key={zone.id}
-              className={`rounded-xl border p-3 text-xs ${isCritical
+              className={`rounded-xl border p-3 text-xs ${
+                isCritical
                   ? 'border-rose-700/50 bg-rose-950/20'
                   : 'border-amber-700/40 bg-amber-950/15'
-                }`}
+              }`}
             >
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-1.5 min-w-0">
                   <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isCritical ? 'bg-rose-500 animate-pulse' : 'bg-amber-500'}`} />
                   <span className="font-bold text-white text-[11px] truncate">{zone.name}</span>
                 </div>
-                <span className="font-mono-numeric text-[10px] font-bold flex-shrink-0" style={{ color: zone.severityColor }}>
+                <span className="text-[10px] font-bold flex-shrink-0" style={{ color: zone.severityColor }}>
                   P{zone.priority}
                 </span>
               </div>
@@ -908,10 +778,11 @@ function SidebarSosPanel() {
               <button
                 id={`sidebar-sos-${zone.id}`}
                 onClick={() => sendSosAlert(zone.id, zones)}
-                className={`w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95 cursor-pointer ${isCritical
+                className={`w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95 cursor-pointer ${
+                  isCritical
                     ? 'bg-rose-600 hover:bg-rose-500 text-white'
                     : 'bg-amber-600 hover:bg-amber-500 text-white'
-                  }`}
+                }`}
               >
                 <Siren className="w-3 h-3" />
                 Send SOS Alert
@@ -936,7 +807,7 @@ function SidebarSosPanel() {
                 <Siren className="w-3 h-3 text-rose-400 flex-shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-white truncate">{entry.zoneName}</div>
-                  <div className="text-slate-500 font-mono-numeric">{entry.timestamp}</div>
+                  <div className="text-slate-500">{entry.timestamp}</div>
                 </div>
               </div>
             ))}
