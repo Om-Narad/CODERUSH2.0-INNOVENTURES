@@ -7,7 +7,11 @@ import {
 } from '../data/mockData';
 
 const SentinelContext = createContext(null);
-const API_BASE_URL = 'https://coderush-2-0-innoventures-f9d6.vercel.app/api';
+// PROD FIX: Dynamic API Base URL from environment variable VITE_API_URL with Render production fallback
+const RAW_API_URL = import.meta.env.VITE_API_URL || 'https://coderush2-0-innoventures.onrender.com';
+const API_BASE_URL = RAW_API_URL.endsWith('/api')
+  ? RAW_API_URL.replace(/\/$/, '')
+  : `${RAW_API_URL.replace(/\/$/, '')}/api`;
 
 export function normalizeRoad(r) {
   let coords = [];
