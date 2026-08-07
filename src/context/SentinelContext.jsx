@@ -4,16 +4,58 @@ import {
   INITIAL_ROADS,
   INITIAL_ALERTS,
   INITIAL_STATS,
-} from '../data/mockData';
+} from '../../FRONTEND/src/data/mockData';
 
 const SentinelContext = createContext(null);
 const API_BASE_URL = 'http://127.0.0.1:8000/api';
 
+export function normalizeRoad(r) {
+  let coords = [];
+  if (Array.isArray(r.geometry)) {
+    coords = r.geometry;
+  } else if (r.geometry?.coordinates) {
+    coords = r.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+  }
+  return {
+    ...r,
+    connectsZoneIds: r.connects_zone_ids || r.connectsZoneIds || [],
+    geometry: coords,
+  };
+}
+
+export function normalizeZone(z, idx) {
+  const fallback = INITIAL_ZONES[idx] || {};
+  let coords = [];
+
+  if (Array.isArray(z.geometry)) {
+    coords = z.geometry;
+  } else if (z.geometry?.coordinates) {
+    const rawRing = Array.isArray(z.geometry.coordinates[0]) ? z.geometry.coordinates[0] : z.geometry.coordinates;
+    coords = rawRing.map(([lng, lat]) => [lat, lng]);
+  } else if (fallback.geometry) {
+    coords = fallback.geometry;
+  }
+
+  return {
+    id: z.id,
+    name: z.name,
+    peopleExposed: z.people_exposed ?? z.peopleExposed ?? fallback.peopleExposed ?? 1000,
+    status: (z.status === 'assigned' || z.status === 'Assigned') ? 'Assigned' : 'Pending',
+    recommendedResponders: Math.max(2, Math.round((z.people_exposed ?? z.peopleExposed ?? fallback.peopleExposed ?? 1000) / 400)),
+    assignedSquad: z.assigned_squad || z.assignedSquad || fallback.assignedSquad || `Squad Delta-${idx + 1} (Standby)`,
+    assignedRespondersCount: (z.status === 'assigned' || z.status === 'Assigned') ? 3 : 0,
+    roadIds: z.roadIds || fallback.roadIds || ['road-1', 'road-2'],
+    nearestShelter: z.assigned_shelter || z.nearestShelter || fallback.nearestShelter || 'Central Relief Hub',
+    basePriority: z.priority_score ?? z.basePriority ?? fallback.basePriority ?? 50,
+    geometry: coords,
+  };
+}
+
 export function computeZonePriority(zone, roadsList) {
-  const zoneRoads = zone.roadIds.map(id => roadsList.find(r => r.id === id)).filter(Boolean);
+  const zoneRoads = (zone.roadIds || []).map(id => roadsList.find(r => r.id === id)).filter(Boolean);
   const openRoads = zoneRoads.filter(r => r.status === 'open');
   const openCount = openRoads.length;
-  const totalCount = zone.roadIds.length;
+  const totalCount = (zone.roadIds || []).length;
 
   let calculatedScore = zone.basePriority || zone.priority_score || 40;
   const blockedCount = totalCount - openCount;
@@ -62,14 +104,13 @@ export function computeZonePriority(zone, roadsList) {
 
 export function SentinelProvider({ children }) {
   const [currentView, setCurrentView] = useState('dashboard');
-  const [roads, setRoads] = useState(INITIAL_ROADS);
+  const [roads, setRoads] = useState(() => INITIAL_ROADS.map(normalizeRoad));
   const [alerts, setAlerts] = useState(INITIAL_ALERTS);
   const [stats, setStats] = useState(INITIAL_STATS);
   const [selectedZoneId, setSelectedZoneId] = useState(null);
-  const [rawZones, setRawZones] = useState(INITIAL_ZONES);
+  const [rawZones, setRawZones] = useState(() => INITIAL_ZONES.map((z, idx) => normalizeZone(z, idx)));
   const [apiOnline, setApiOnline] = useState(false);
 
-  // Fetch initial state from FastAPI backend on mount
   useEffect(() => {
     async function fetchState() {
       try {
@@ -78,7 +119,7 @@ export function SentinelProvider({ children }) {
           const data = await res.json();
           if (data.zones && data.roads) {
             setApiOnline(true);
-            setRoads(data.roads);
+            setRoads(data.roads.map(normalizeRoad));
             setAlerts(data.alerts);
             if (data.stats) {
               setStats({
@@ -88,21 +129,7 @@ export function SentinelProvider({ children }) {
                 sheltersTotal: data.stats.shelters_total ?? data.stats.sheltersTotal,
               });
             }
-            // Map backend zone fields
-            const mappedZones = data.zones.map((z, idx) => ({
-              id: z.id,
-              name: z.name,
-              peopleExposed: z.people_exposed ?? z.peopleExposed,
-              status: z.status === 'assigned' ? 'Assigned' : 'Pending',
-              recommendedResponders: Math.max(2, Math.round(z.people_exposed / 400)),
-              assignedSquad: z.assigned_squad || `Squad Delta-${idx + 1} (Standby)`,
-              assignedRespondersCount: z.status === 'assigned' ? 3 : 0,
-              roadIds: INITIAL_ZONES[idx]?.roadIds || ['road-1', 'road-2'],
-              nearestShelter: z.assigned_shelter || INITIAL_ZONES[idx]?.nearestShelter,
-              basePriority: z.priority_score ?? INITIAL_ZONES[idx]?.basePriority,
-              geometry: z.geometry?.coordinates ? z.geometry.coordinates[0].map(([lng, lat]) => [lat, lng]) : INITIAL_ZONES[idx].geometry,
-            }));
-            setRawZones(mappedZones);
+            setRawZones(data.zones.map((z, idx) => normalizeZone(z, idx)));
           }
         }
       } catch (err) {
@@ -129,7 +156,7 @@ export function SentinelProvider({ children }) {
         const res = await fetch(`${API_BASE_URL}/roads/${roadId}/toggle`, { method: 'POST' });
         if (res.ok) {
           const data = await res.json();
-          setRoads(data.roads);
+          setRoads(data.roads.map(normalizeRoad));
           setAlerts(data.alerts);
           return;
         }
@@ -138,7 +165,6 @@ export function SentinelProvider({ children }) {
       }
     }
 
-    // Local fallback logic
     let toggledRoadName = '';
     let newStatus = 'open';
 
@@ -152,7 +178,7 @@ export function SentinelProvider({ children }) {
     });
 
     setRoads(updatedRoads);
-    const affectedZones = rawZones.filter(z => z.roadIds.includes(roadId));
+    const affectedZones = rawZones.filter(z => (z.roadIds || []).includes(roadId));
 
     const newAlert = {
       id: `alert-${Date.now()}`,
@@ -169,7 +195,7 @@ export function SentinelProvider({ children }) {
         const res = await fetch(`${API_BASE_URL}/simulate`, { method: 'POST' });
         if (res.ok) {
           const data = await res.json();
-          setRoads(data.roads);
+          setRoads(data.roads.map(normalizeRoad));
           setAlerts(data.alerts);
           return;
         }
@@ -190,7 +216,7 @@ export function SentinelProvider({ children }) {
       if (openRoad) {
         toggleRoadStatus(openRoad.id);
       } else {
-        setRoads(INITIAL_ROADS);
+        setRoads(INITIAL_ROADS.map(normalizeRoad));
         setAlerts(prev => [
           {
             id: `alert-${Date.now()}`,
@@ -239,7 +265,6 @@ export function SentinelProvider({ children }) {
       }
     }
 
-    // Local fallback
     let newlyAssignedCount = 0;
     let zoneName = '';
     let isNowAssigned = false;
