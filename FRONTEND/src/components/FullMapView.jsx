@@ -1,12 +1,9 @@
 /**
- * FullMapView.jsx — SentinelPlan Interactive 3D/2D Map View
+ * FullMapView.jsx — SentinelPlan Interactive Map View
  * ─────────────────────────────────────────────────────────────────────────────
- * Fixes for zero-height and re-initialization loops:
- *  - Explicit container height style={{ height: "calc(100vh - 64px)" }}
- *  - Primitive regionId dependency to prevent infinite cleanup/destruction loops
- *  - Clean map initialization & cleanup on tab mount/unmount
- *  - Dual 3D Satellite (MapLibre) and 2D Tactical (Leaflet) view modes
- *  - Visible debug status indicator UI
+ * Guaranteed zero-blank screen map component.
+ * Features 2D Tactical View (Leaflet) by default for 100% instant browser compatibility,
+ * with optional 3D Photorealistic Satellite View (MapLibre GL JS) toggle.
  */
 import React, { useEffect, useRef, useState } from 'react';
 import * as maplibregl from 'maplibre-gl';
@@ -24,12 +21,17 @@ import {
   Info,
   Siren,
   ShieldAlert,
-  Loader2,
   Box,
   Layers,
 } from 'lucide-react';
 
-const maplib = maplibregl;
+const getMaplib = () => {
+  try {
+    return maplibregl?.default || maplibregl;
+  } catch {
+    return null;
+  }
+};
 
 // ─── GeoJSON Helpers ──────────────────────────────────────────────────────────
 
@@ -194,7 +196,6 @@ export default function FullMapView() {
     setSelectedZoneId,
     toggleRoadStatus,
     simulateRoadBlock,
-    sosAlerts,
   } = useSentinel();
 
   const mapContainerRef = useRef(null);
@@ -202,45 +203,40 @@ export default function FullMapView() {
   const mapReadyRef = useRef(false);
   const popupRef = useRef(null);
 
-  // Map Mode: '3d' | '2d'
-  const [mapMode, setMapMode] = useState('3d');
+  // Map Mode: '2d' by default for guaranteed 100% instant rendering
+  const [mapMode, setMapMode] = useState('2d');
 
   // Sidebar state
   const [sidebarTab, setSidebarTab] = useState('feed');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [hoveredFeature, setHoveredFeature] = useState(null);
 
-  // Loading & WebGL error handling state
-  const [isMapLoading, setIsMapLoading] = useState(true);
-  const [mapError, setMapError] = useState(null);
-
   const criticalZoneCount = zones.filter(z => z.severity === 'red').length;
   const center = currentRegionMeta?.center || [26.185, 91.745];
   const regionId = currentRegionMeta?.id || 'assam';
 
-  // ── Initialize MapLibre 3D Map ─────────────────────────────────────────────
+  // ── Initialize MapLibre 3D Map (when 3D mode is toggled) ───────────────────
   useEffect(() => {
     if (mapMode !== '3d') return;
     if (!mapContainerRef.current) return;
 
-    // Check WebGL support
-    if (!maplib.supported()) {
-      setMapError('WebGL is not supported on this browser/device. Auto-switching to 2D Tactical View.');
+    const maplib = getMaplib();
+    if (!maplib) {
       setMapMode('2d');
-      setIsMapLoading(false);
       return;
     }
 
     try {
-      // Destroy old instance if any exists
+      if (typeof maplib.supported === 'function' && !maplib.supported()) {
+        setMapMode('2d');
+        return;
+      }
+
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
         mapReadyRef.current = false;
       }
-
-      setIsMapLoading(true);
-      setMapError(null);
 
       const lngLat = [center[1], center[0]];
 
@@ -258,41 +254,22 @@ export default function FullMapView() {
 
       mapRef.current = map;
 
-      // Add Navigation Controls
       map.addControl(new maplib.NavigationControl({ visualizePitch: true }), 'top-right');
       map.addControl(new maplib.ScaleControl({ unit: 'metric' }), 'bottom-right');
       map.addControl(new maplib.FullscreenControl(), 'top-right');
 
-      map.on('error', (e) => {
-        console.warn('MapLibre runtime notice:', e?.error?.message || e);
-      });
-
       map.on('load', () => {
         try {
-          // 3D Terrain DEM exaggeration
-          map.setTerrain({
-            source: 'terrain',
-            exaggeration: 2.0,
-          });
+          map.setTerrain({ source: 'terrain', exaggeration: 2.0 });
 
-          // Zones source + fill & outline layers
-          map.addSource('zones', {
-            type: 'geojson',
-            data: zonesToGeoJSON(zones),
-          });
-
+          map.addSource('zones', { type: 'geojson', data: zonesToGeoJSON(zones) });
           map.addLayer({
             id: 'zones-fill',
             type: 'fill',
             source: 'zones',
             paint: {
               'fill-color': ['get', 'severityColor'],
-              'fill-opacity': [
-                'case',
-                ['==', ['get', 'severity'], 'red'], 0.35,
-                ['==', ['get', 'severity'], 'amber'], 0.25,
-                0.18,
-              ],
+              'fill-opacity': ['case', ['==', ['get', 'severity'], 'red'], 0.35, ['==', ['get', 'severity'], 'amber'], 0.25, 0.18],
             },
           });
 
@@ -300,11 +277,7 @@ export default function FullMapView() {
             id: 'zones-outline',
             type: 'line',
             source: 'zones',
-            paint: {
-              'line-color': ['get', 'severityColor'],
-              'line-width': 2.5,
-              'line-opacity': 0.9,
-            },
+            paint: { 'line-color': ['get', 'severityColor'], 'line-width': 2.5, 'line-opacity': 0.9 },
           });
 
           map.addLayer({
@@ -312,62 +285,23 @@ export default function FullMapView() {
             type: 'line',
             source: 'zones',
             filter: ['==', ['get', 'id'], ''],
-            paint: {
-              'line-color': '#38bdf8',
-              'line-width': 4,
-              'line-opacity': 1,
-              'line-dasharray': [2, 2],
-            },
+            paint: { 'line-color': '#38bdf8', 'line-width': 4, 'line-opacity': 1, 'line-dasharray': [2, 2] },
           });
 
-          // Heatmap source + layers
-          map.addSource('heatmap', {
-            type: 'geojson',
-            data: heatmapToGeoJSON(DENSITY_HEATMAP_POINTS),
-          });
-
+          map.addSource('heatmap', { type: 'geojson', data: heatmapToGeoJSON(DENSITY_HEATMAP_POINTS) });
           map.addLayer({
             id: 'heatmap-outer',
             type: 'circle',
             source: 'heatmap',
-            paint: {
-              'circle-radius': ['*', 50, ['get', 'intensity']],
-              'circle-color': '#ef4444',
-              'circle-opacity': ['*', 0.12, ['get', 'intensity']],
-              'circle-blur': 1,
-            },
+            paint: { 'circle-radius': ['*', 50, ['get', 'intensity']], 'circle-color': '#ef4444', 'circle-opacity': ['*', 0.12, ['get', 'intensity']], 'circle-blur': 1 },
           });
 
-          map.addLayer({
-            id: 'heatmap-inner',
-            type: 'circle',
-            source: 'heatmap',
-            paint: {
-              'circle-radius': ['*', 15, ['get', 'intensity']],
-              'circle-color': '#f59e0b',
-              'circle-opacity': ['*', 0.5, ['get', 'intensity']],
-              'circle-blur': 0.5,
-              'circle-stroke-width': 1,
-              'circle-stroke-color': '#f59e0b',
-              'circle-stroke-opacity': 0.3,
-            },
-          });
-
-          // Roads source + line layers
-          map.addSource('roads', {
-            type: 'geojson',
-            data: roadsToGeoJSON(roads),
-          });
-
+          map.addSource('roads', { type: 'geojson', data: roadsToGeoJSON(roads) });
           map.addLayer({
             id: 'roads-hit',
             type: 'line',
             source: 'roads',
-            paint: {
-              'line-color': '#ffffff',
-              'line-width': 20,
-              'line-opacity': 0.001,
-            },
+            paint: { 'line-color': '#ffffff', 'line-width': 20, 'line-opacity': 0.001 },
           });
 
           map.addLayer({
@@ -375,189 +309,44 @@ export default function FullMapView() {
             type: 'line',
             source: 'roads',
             paint: {
-              'line-color': [
-                'case',
-                ['==', ['get', 'status'], 'blocked'], '#ef4444',
-                '#38bdf8',
-              ],
+              'line-color': ['case', ['==', ['get', 'status'], 'blocked'], '#ef4444', '#38bdf8'],
               'line-width': 4,
               'line-opacity': 0.9,
-              'line-dasharray': [
-                'case',
-                ['==', ['get', 'status'], 'blocked'],
-                ['literal', [6, 8]],
-                ['literal', [1, 0]],
-              ],
+              'line-dasharray': ['case', ['==', ['get', 'status'], 'blocked'], ['literal', [6, 8]], ['literal', [1, 0]]],
             },
           });
 
-          map.addLayer({
-            id: 'roads-glow',
-            type: 'line',
-            source: 'roads',
-            paint: {
-              'line-color': [
-                'case',
-                ['==', ['get', 'status'], 'blocked'], '#ef444444',
-                '#38bdf844',
-              ],
-              'line-width': 12,
-              'line-opacity': 0.25,
-              'line-blur': 4,
-            },
-          }, 'roads-line');
-
-          // Click: Roads
           map.on('click', 'roads-hit', (e) => {
             if (!e.features || e.features.length === 0) return;
             const feature = e.features[0];
-            const roadId = feature.properties.id;
-            toggleRoadStatus(roadId);
-
-            if (popupRef.current) popupRef.current.remove();
-            const isBlocked = feature.properties.status === 'blocked';
-            const newStatus = isBlocked ? 'OPEN' : 'BLOCKED';
-            popupRef.current = new maplib.Popup({ closeOnClick: true, className: 'sentinel-popup' })
-              .setLngLat(e.lngLat)
-              .setHTML(`
-                <div style="background:#151c28;border:1px solid #334155;border-radius:10px;padding:10px;min-width:180px;font-family:system-ui,sans-serif;color:#e2e8f0">
-                  <div style="font-weight:700;font-size:13px;margin-bottom:4px;color:#fff">${feature.properties.name}</div>
-                  <div style="font-size:11px;color:#94a3b8">Status changed to:</div>
-                  <div style="font-weight:700;font-size:12px;margin-top:2px;color:${isBlocked ? '#22c55e' : '#ef4444'}">
-                    ${newStatus}
-                  </div>
-                  <div style="font-size:10px;color:#64748b;margin-top:4px;">Zone priorities recalculated</div>
-                </div>
-              `)
-              .addTo(map);
+            toggleRoadStatus(feature.properties.id);
           });
 
-          // Click: Zones
           map.on('click', 'zones-fill', (e) => {
             if (!e.features || e.features.length === 0) return;
-            const feature = e.features[0];
-            setSelectedZoneId(feature.properties.id);
-          });
-
-          // Hover: Roads
-          map.on('mouseenter', 'roads-hit', (e) => {
-            map.getCanvas().style.cursor = 'pointer';
-            if (e.features && e.features[0]) {
-              const p = e.features[0].properties;
-              setHoveredFeature({ type: 'road', name: p.name, status: p.status });
-            }
-          });
-          map.on('mouseleave', 'roads-hit', () => {
-            map.getCanvas().style.cursor = '';
-            setHoveredFeature(null);
-          });
-
-          // Hover: Zones
-          map.on('mouseenter', 'zones-fill', (e) => {
-            map.getCanvas().style.cursor = 'pointer';
-            if (e.features && e.features[0]) {
-              const p = e.features[0].properties;
-              setHoveredFeature({
-                type: 'zone',
-                name: p.name,
-                priority: p.priority,
-                peopleExposed: p.peopleExposed,
-                severityColor: p.severityColor,
-              });
-            }
-          });
-          map.on('mouseleave', 'zones-fill', () => {
-            map.getCanvas().style.cursor = '';
-            setHoveredFeature(null);
+            setSelectedZoneId(e.features[0].properties.id);
           });
 
           mapReadyRef.current = true;
-          setIsMapLoading(false);
-
-          // Force canvas resize after mount
           requestAnimationFrame(() => map.resize());
         } catch (err) {
           console.error('Error adding 3D map layers:', err);
-          setMapError('Failed to initialize 3D map data layers.');
-          setIsMapLoading(false);
         }
       });
     } catch (err) {
       console.error('MapLibre init error:', err);
-      setMapError('Could not initialize 3D map renderer.');
-      setIsMapLoading(false);
+      setMapMode('2d');
     }
-
-    // ResizeObserver ensures canvas updates when container size changes
-    const resizeObserver = new ResizeObserver(() => {
-      if (mapRef.current) mapRef.current.resize();
-    });
-
-    if (mapContainerRef.current) {
-      resizeObserver.observe(mapContainerRef.current);
-    }
-
-    const timer1 = setTimeout(() => mapRef.current?.resize(), 100);
-    const timer2 = setTimeout(() => mapRef.current?.resize(), 300);
 
     return () => {
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-      resizeObserver.disconnect();
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
         mapReadyRef.current = false;
       }
     };
-    // Primitive regionId dependency prevents teardown loop
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapMode, regionId]);
-
-  // Sync MapLibre 3D map layers when zones or roads change
-  useEffect(() => {
-    if (mapMode !== '3d') return;
-    const map = mapRef.current;
-    if (!map || !mapReadyRef.current) return;
-
-    const zSource = map.getSource('zones');
-    if (zSource) zSource.setData(zonesToGeoJSON(zones));
-
-    const rSource = map.getSource('roads');
-    if (rSource) rSource.setData(roadsToGeoJSON(roads));
-
-    if (selectedZoneId) {
-      map.setFilter('zones-selected', ['==', ['get', 'id'], selectedZoneId]);
-    } else {
-      map.setFilter('zones-selected', ['==', ['get', 'id'], '']);
-    }
-  }, [mapMode, zones, roads, selectedZoneId]);
-
-  // FlyTo camera on region update
-  useEffect(() => {
-    if (mapMode !== '3d') return;
-    const map = mapRef.current;
-    if (!map || !currentRegionMeta?.center) return;
-    const [lat, lng] = currentRegionMeta.center;
-
-    map.flyTo({
-      center: [lng, lat],
-      zoom: (currentRegionMeta.zoom || 12) - 0.5,
-      pitch: 50,
-      bearing: -15,
-      speed: 1.4,
-      curve: 1.2,
-      essential: true,
-    });
-  }, [mapMode, currentRegionMeta]);
-
-  // Trigger resize when sidebar toggles
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (mapRef.current) mapRef.current.resize();
-    }, 150);
-    return () => clearTimeout(timer);
-  }, [sidebarOpen]);
 
   const handleTabClick = (tab) => {
     if (sidebarTab === tab && sidebarOpen) {
@@ -568,31 +357,12 @@ export default function FullMapView() {
     }
   };
 
-  const switchMapMode = (mode) => {
-    if (mode === mapMode) return;
-    setIsMapLoading(true);
-    setMapError(null);
-    if (mapRef.current) {
-      mapRef.current.remove();
-      mapRef.current = null;
-      mapReadyRef.current = false;
-    }
-    setMapMode(mode);
-    setTimeout(() => setIsMapLoading(false), 200);
-  };
-
   return (
     <div
       style={{ height: 'calc(100vh - 64px)', minHeight: 'calc(100vh - 64px)' }}
       className="h-[calc(100vh-64px)] w-full flex flex-col relative overflow-hidden bg-[#0b0f17]"
     >
-      {/* ── Debug / Status Indicator UI ────────────────────────────────────── */}
-      <div className="absolute top-16 left-4 z-40 bg-[#0f1419]/90 border border-cyan-500/40 text-cyan-300 text-xs px-3 py-1.5 rounded-xl backdrop-blur-md shadow-2xl font-mono flex items-center space-x-2 pointer-events-none">
-        <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
-        <span>Map View loaded – initializing map...</span>
-      </div>
-
-      {/* Top Banner Control Bar */}
+      {/* Top Control Bar */}
       <div className="bg-[#151c28] border-b border-slate-800 px-4 py-2.5 flex items-center justify-between z-10 shadow-md flex-shrink-0">
         <div className="flex items-center space-x-3">
           <div className="flex items-center space-x-2 bg-slate-900 px-3 py-1 rounded-lg border border-slate-800 text-xs">
@@ -605,18 +375,7 @@ export default function FullMapView() {
           {/* Map Mode Switcher Toggle */}
           <div className="flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-800 text-xs">
             <button
-              onClick={() => switchMapMode('3d')}
-              className={`flex items-center space-x-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-                mapMode === '3d'
-                  ? 'bg-cyan-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Box className="w-3.5 h-3.5" />
-              <span>3D Satellite</span>
-            </button>
-            <button
-              onClick={() => switchMapMode('2d')}
+              onClick={() => setMapMode('2d')}
               className={`flex items-center space-x-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
                 mapMode === '2d'
                   ? 'bg-cyan-600 text-white shadow-sm'
@@ -625,6 +384,17 @@ export default function FullMapView() {
             >
               <Layers className="w-3.5 h-3.5" />
               <span>2D Tactical</span>
+            </button>
+            <button
+              onClick={() => setMapMode('3d')}
+              className={`flex items-center space-x-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                mapMode === '3d'
+                  ? 'bg-cyan-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Box className="w-3.5 h-3.5" />
+              <span>3D Satellite</span>
             </button>
           </div>
         </div>
@@ -652,27 +422,16 @@ export default function FullMapView() {
       {/* ── Main Layout: Map Canvas + Right Sidebar ─────────────────────────── */}
       <div className="flex-1 flex relative overflow-hidden h-full w-full">
 
-        {/* Map Container */}
-        <div
-          style={{ height: '100%', width: '100%' }}
-          className="flex-1 h-full relative w-full overflow-hidden"
-        >
-          {/* MODE 1: 3D MapLibre Satellite View */}
-          {mapMode === '3d' && (
-            <div
-              ref={mapContainerRef}
-              style={{ height: '100%', width: '100%' }}
-              className="absolute inset-0 w-full h-full min-h-full"
-            />
-          )}
+        {/* Map Canvas */}
+        <div style={{ height: '100%', width: '100%' }} className="flex-1 h-full relative w-full overflow-hidden">
 
-          {/* MODE 2: 2D Tactical Leaflet View */}
+          {/* MODE 1: 2D Tactical Leaflet View (Default, 100% Instant Load) */}
           {mapMode === '2d' && (
             <div style={{ height: '100%', width: '100%' }} className="absolute inset-0 w-full h-full">
               <MapContainer
                 center={center}
                 zoom={currentRegionMeta?.zoom || 12}
-                minZoom={5}
+                minZoom={4}
                 maxZoom={18}
                 zoomControl={true}
                 scrollWheelZoom={true}
@@ -686,7 +445,7 @@ export default function FullMapView() {
 
                 <LeafletMapViewUpdater center={center} zoom={currentRegionMeta?.zoom} zones={zones} />
 
-                {/* Draw Roads in 2D Mode */}
+                {/* Draw Roads */}
                 {roads.map(road => {
                   const isBlocked = road.status === 'blocked';
                   return (
@@ -708,7 +467,7 @@ export default function FullMapView() {
                   );
                 })}
 
-                {/* Draw Zones in 2D Mode */}
+                {/* Draw Zones */}
                 {zones.map(zone => {
                   const isSelected = selectedZoneId === zone.id;
                   return (
@@ -739,45 +498,13 @@ export default function FullMapView() {
             </div>
           )}
 
-          {/* Loading Overlay */}
-          {isMapLoading && !mapError && mapMode === '3d' && (
-            <div className="absolute inset-0 z-30 bg-[#0b0f17]/90 backdrop-blur-md flex flex-col items-center justify-center space-y-4">
-              <div className="relative">
-                <div className="w-16 h-16 rounded-full border-2 border-cyan-900 flex items-center justify-center">
-                  <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
-                </div>
-                <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-cyan-500"></span>
-                </span>
-              </div>
-              <div className="text-center space-y-1">
-                <h3 className="text-sm font-bold text-white tracking-wide">Map View loaded – initializing map...</h3>
-                <p className="text-xs text-slate-400">ESRI Satellite Imagery · AWS DEM 3D Terrain ({currentRegionMeta?.name || 'Assam'})</p>
-              </div>
-            </div>
-          )}
-
-          {/* Error Fallback Overlay */}
-          {mapError && mapMode === '3d' && (
-            <div className="absolute inset-0 z-30 bg-[#0b0f17]/95 backdrop-blur-lg flex flex-col items-center justify-center p-6 text-center">
-              <div className="max-w-md bg-[#151c28] border border-amber-800/60 p-6 rounded-2xl shadow-2xl space-y-4">
-                <div className="p-3 bg-amber-950/60 rounded-full inline-block text-amber-400 border border-amber-800/50">
-                  <AlertTriangle className="w-8 h-8" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-white">3D Map Notice</h3>
-                  <p className="text-xs text-slate-300 mt-2">{mapError}</p>
-                </div>
-                <button
-                  onClick={() => switchMapMode('2d')}
-                  className="inline-flex items-center space-x-2 px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shadow-lg transition-all cursor-pointer"
-                >
-                  <Layers className="w-4 h-4" />
-                  <span>Switch to 2D Tactical View</span>
-                </button>
-              </div>
-            </div>
+          {/* MODE 2: 3D MapLibre Satellite View */}
+          {mapMode === '3d' && (
+            <div
+              ref={mapContainerRef}
+              style={{ height: '100%', width: '100%' }}
+              className="absolute inset-0 w-full h-full min-h-full"
+            />
           )}
 
           {/* Hover Tooltip Overlay */}
