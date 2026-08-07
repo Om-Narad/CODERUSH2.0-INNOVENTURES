@@ -307,6 +307,26 @@ export function SentinelProvider({ children }) {
     setAlerts(prev => [newAlert, ...prev]);
   };
 
+  /**
+   * predictFlood — Sends an image File to POST /api/predict
+   * Returns: { label: "Flood"|"No Flood", confidence: number, flood_probability: number }
+   * Throws an Error with a human-readable message on failure.
+   */
+  const predictFlood = async (imageFile) => {
+    const formData = new FormData();
+    formData.append('file', imageFile);
+    const res = await fetch(`${API_BASE_URL}/predict`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!res.ok) {
+      let detail = `Server error ${res.status}`;
+      try { detail = (await res.json()).detail || detail; } catch {}
+      throw new Error(detail);
+    }
+    return await res.json(); // { label, confidence, flood_probability }
+  };
+
   return (
     <SentinelContext.Provider
       value={{
@@ -321,6 +341,7 @@ export function SentinelProvider({ children }) {
         toggleRoadStatus,
         simulateRoadBlock,
         assignResponders,
+        predictFlood,
         apiOnline,
       }}
     >

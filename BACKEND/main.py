@@ -7,14 +7,59 @@ A production deployment would persist state in PostgreSQL with PostGIS extension
 for spatial querying and polygon-line intersections.
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timezone
 import uuid
+import io
+import os
 
-from models import Zone, Road, Alert, Stats, AssignSquadRequest
+from models import Zone, Road, Alert, Stats, AssignSquadRequest, PredictionResponse
 from scoring import calculate_priority, generate_rationale
 from data import INITIAL_ZONES_DATA, INITIAL_ROADS_DATA, INITIAL_STATS_DATA, INITIAL_ALERTS_DATA
+
+# ─── ML Model (flood_resnet18.pth) ─────────────────────────────────────────────
+# Lazy-imported so the server still starts if torch is unavailable
+_flood_model = None
+_model_load_error = None
+
+def _load_flood_model():
+    """Loads flood_resnet18.pth once at startup. Model file lives in project root."""
+    global _flood_model, _model_load_error
+    try:
+        import torch
+        import torchvision.models as tv_models
+        import torchvision.transforms as transforms
+
+        # Resolve path: model lives two levels up from BACKEND/
+        model_path = os.path.join(os.path.dirname(__file__), '..', 'flood_resnet18.pth')
+        model_path = os.path.abspath(model_path)
+
+        if not os.path.exists(model_path):
+            _model_load_error = f"Model file not found at {model_path}"
+            print(f"[WARN] {_model_load_error}")
+            return
+
+        # Build the same ResNet-18 architecture used during training
+        model = tv_models.resnet18(weights=None)
+        model.fc = torch.nn.Linear(model.fc.in_features, 2)  # binary: No Flood / Flood
+
+        state_dict = torch.load(model_path, map_location=torch.device('cpu'))
+        # Support both raw state_dict and {'model': state_dict} checkpoint formats
+        if isinstance(state_dict, dict) and 'model' in state_dict:
+            state_dict = state_dict['model']
+        elif isinstance(state_dict, dict) and 'state_dict' in state_dict:
+            state_dict = state_dict['state_dict']
+
+        model.load_state_dict(state_dict)
+        model.eval()
+        _flood_model = model
+        print(f"[INFO] Flood detection model loaded from {model_path}")
+
+    except Exception as e:
+        _model_load_error = str(e)
+        print(f"[ERROR] Failed to load flood model: {e}")
+
 
 app = FastAPI(
     title="SentinelPlan Disaster Response API",
@@ -68,6 +113,7 @@ def seed_in_memory_state():
 @app.on_event("startup")
 def startup_event():
     seed_in_memory_state()
+    _load_flood_model()
 
 @app.get("/")
 def root():
@@ -78,8 +124,10 @@ def root():
         "scenario": "Guwahati Assam Flood Response",
         "frontend_app": "http://localhost:5173/",
         "api_docs": "http://localhost:8000/docs",
+        "model_loaded": _flood_model is not None,
         "endpoints": {
             "health": "/api/health",
+            "predict": "POST /api/predict  (image upload → flood detection)",
             "state": "/api/state",
             "toggle_road": "POST /api/roads/{road_id}/toggle",
             "simulate": "POST /api/simulate",
@@ -90,7 +138,71 @@ def root():
 @app.get("/api/health")
 def health_check():
     """Health check endpoint to verify backend status."""
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "model_loaded": _flood_model is not None,
+        "model_error": _model_load_error,
+    }
+
+
+@app.post("/api/predict", response_model=PredictionResponse)
+async def predict_flood(file: UploadFile = File(...)):
+    """
+    Flood Detection Inference endpoint.
+    Accepts a multipart/form-data image upload and returns:
+      { "label": "Flood" | "No Flood", "confidence": 0.0-1.0, "flood_probability": 0.0-1.0 }
+    """
+    if _flood_model is None:
+        detail = _model_load_error or "Model not loaded. Check server logs."
+        raise HTTPException(status_code=503, detail=detail)
+
+    # Validate content type
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="File must be an image (JPEG, PNG, etc.)")
+
+    try:
+        import torch
+        import torch.nn.functional as F
+        from PIL import Image
+        import torchvision.transforms as transforms
+
+        # Read raw bytes and open with PIL
+        raw = await file.read()
+        img = Image.open(io.BytesIO(raw)).convert("RGB")
+
+        # Standard ImageNet preprocessing (same as ResNet-18 training)
+        preprocess = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225]
+            ),
+        ])
+
+        tensor = preprocess(img).unsqueeze(0)  # shape: [1, 3, 224, 224]
+
+        with torch.no_grad():
+            logits = _flood_model(tensor)           # shape: [1, 2]
+            probs = F.softmax(logits, dim=1)[0]     # shape: [2]
+
+        # Class indices: 0 = No Flood, 1 = Flood
+        no_flood_prob = float(probs[0])
+        flood_prob    = float(probs[1])
+
+        is_flood   = flood_prob >= 0.5
+        label      = "Flood" if is_flood else "No Flood"
+        confidence = flood_prob if is_flood else no_flood_prob
+
+        return PredictionResponse(
+            label=label,
+            confidence=round(confidence, 4),
+            flood_probability=round(flood_prob, 4),
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Inference error: {str(e)}")
 
 @app.get("/api/state")
 def get_state():
