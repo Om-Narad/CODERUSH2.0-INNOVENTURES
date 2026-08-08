@@ -8,24 +8,26 @@ import {
 
 const SentinelContext = createContext(null);
 
-// ─── PRODUCTION API URL CONFIG ────────────────────────────────────────────────
-// On Vercel: set VITE_API_URL = https://coderush2-0-innoventures.onrender.com/api
-// On localhost: leave unset — Vite proxy rewrites /api → http://127.0.0.1:8000
+// ─── PRODUCTION API URL ────────────────────────────────────────────────────────
+// Set VITE_API_URL in your Vercel project environment variables:
+//   VITE_API_URL = https://coderush2-0-innoventures.onrender.com
 //
-// IMPORTANT: VITE_API_URL must NOT have a trailing slash.
-// Valid values:
-//   https://coderush2-0-innoventures.onrender.com/api   ← production (Vercel)
-//   (unset)                                              ← localhost (uses proxy)
-const API_BASE_URL = (() => {
+// Do NOT include a trailing slash or /api — the code appends /api/... to each call.
+//
+// On localhost: leave VITE_API_URL unset. Vite's dev proxy (vite.config.js)
+// transparently forwards /api/* requests to http://127.0.0.1:8000.
+const API_URL = (() => {
   const fromEnv = import.meta.env.VITE_API_URL;
   if (fromEnv) {
-    const url = fromEnv.replace(/\/$/, ''); // strip trailing slash
-    console.log('[SentinelPlan] API_BASE_URL from env:', url);
+    const url = fromEnv.replace(/\/+$/, ''); // strip any trailing slashes
+    console.log('[SentinelPlan] API_URL resolved from VITE_API_URL:', url);
     return url;
   }
-  // Localhost fallback — Vite proxy handles /api → 127.0.0.1:8000
-  console.log('[SentinelPlan] VITE_API_URL not set, using production fallback');
-  return 'https://coderush2-0-innoventures.onrender.com/api';
+  // No env var set → use the production backend URL as the hardcoded fallback.
+  // Fetch calls below all include /api/... in their path so this will hit:
+  //   https://coderush2-0-innoventures.onrender.com/api/regions   etc.
+  console.log('[SentinelPlan] VITE_API_URL not set — using hardcoded production fallback');
+  return 'https://coderush2-0-innoventures.onrender.com';
 })();
 
 export function normalizeRoad(r) {
@@ -150,26 +152,27 @@ export function SentinelProvider({ children }) {
   // Fetch available regions at startup
   useEffect(() => {
     async function loadRegions() {
+      const url = `${API_URL}/api/regions`;
       try {
-        console.log('[SentinelPlan] Fetching regions from:', `${API_BASE_URL}/regions`);
-        const res = await fetch(`${API_BASE_URL}/regions`);
+        console.log('[SentinelPlan] Fetching regions from:', url);
+        const res = await fetch(url);
         if (res.ok) {
           const list = await res.json();
           console.log('[SentinelPlan] Regions loaded:', list.length);
           setAvailableRegions(list);
         } else {
-          console.error('[SentinelPlan] /regions returned HTTP', res.status, res.statusText);
+          console.error('[SentinelPlan] /api/regions returned HTTP', res.status, res.statusText);
         }
       } catch (e) {
-        console.error('[SentinelPlan] Could not fetch regions — is the backend reachable?', API_BASE_URL, e.message);
+        console.error('[SentinelPlan] Could not fetch regions — backend unreachable?', url, e.message);
       }
     }
     loadRegions();
   }, []);
 
-  // Fetch state for active region — called on mount and whenever region switches
+  // Fetch state for active region — called on mount and on every region switch
   const fetchStateForRegion = useCallback(async (regionId) => {
-    const url = `${API_BASE_URL}/state?region=${encodeURIComponent(regionId)}`;
+    const url = `${API_URL}/api/state?region=${encodeURIComponent(regionId)}`;
     console.log('[SentinelPlan] fetchStateForRegion →', url);
     try {
       const res = await fetch(url);
@@ -180,7 +183,7 @@ export function SentinelProvider({ children }) {
         if (data.region) setCurrentRegionMeta(data.region);
         if (data.zones && data.roads) {
           setRoads(data.roads.map(normalizeRoad));
-          // alerts may be undefined for some regions — default to empty array
+          // alerts may be absent for some regions — default to empty array
           setAlerts(data.alerts || []);
           if (data.stats) {
             setStats({
@@ -196,11 +199,11 @@ export function SentinelProvider({ children }) {
         }
       } else {
         setApiOnline(false);
-        console.error('[SentinelPlan] /state returned HTTP', res.status, 'for region:', regionId);
+        console.error('[SentinelPlan] /api/state returned HTTP', res.status, 'for region:', regionId);
       }
     } catch (err) {
       setApiOnline(false);
-      console.error('[SentinelPlan] API fetch failed — falling back to mock data. URL:', url, '| Error:', err.message);
+      console.error('[SentinelPlan] /api/state fetch failed. URL:', url, '| Error:', err.message);
     }
   }, []);
 
@@ -226,15 +229,15 @@ export function SentinelProvider({ children }) {
   const toggleRoadStatus = async (roadId) => {
     if (apiOnline) {
       try {
-        const res = await fetch(`${API_BASE_URL}/roads/${roadId}/toggle?region=${currentRegionId}`, { method: 'POST' });
+        const res = await fetch(`${API_URL}/api/roads/${roadId}/toggle?region=${encodeURIComponent(currentRegionId)}`, { method: 'POST' });
         if (res.ok) {
           const data = await res.json();
           setRoads(data.roads.map(normalizeRoad));
-          setAlerts(data.alerts);
+          setAlerts(data.alerts || []);
           return;
         }
       } catch (e) {
-        console.error('API toggle error, falling back', e);
+        console.error('[SentinelPlan] /api/roads/toggle failed, applying local fallback:', e.message);
       }
     }
 
@@ -265,15 +268,15 @@ export function SentinelProvider({ children }) {
   const simulateRoadBlock = async () => {
     if (apiOnline) {
       try {
-        const res = await fetch(`${API_BASE_URL}/simulate?region=${currentRegionId}`, { method: 'POST' });
+        const res = await fetch(`${API_URL}/api/simulate?region=${encodeURIComponent(currentRegionId)}`, { method: 'POST' });
         if (res.ok) {
           const data = await res.json();
           setRoads(data.roads.map(normalizeRoad));
-          setAlerts(data.alerts);
+          setAlerts(data.alerts || []);
           return;
         }
       } catch (e) {
-        console.error('API simulate error, falling back', e);
+        console.error('[SentinelPlan] /api/simulate failed, applying local fallback:', e.message);
       }
     }
 
@@ -286,16 +289,16 @@ export function SentinelProvider({ children }) {
   const assignResponders = async (zoneId) => {
     if (apiOnline) {
       try {
-        const res = await fetch(`${API_BASE_URL}/zones/${zoneId}/assign?region=${currentRegionId}`, { method: 'POST' });
+        const res = await fetch(`${API_URL}/api/zones/${zoneId}/assign?region=${encodeURIComponent(currentRegionId)}`, { method: 'POST' });
         if (res.ok) {
           const data = await res.json();
-          setAlerts(data.alerts);
+          setAlerts(data.alerts || []);
           if (data.stats) {
             setStats({
-              respondersDeployed: data.stats.responders_deployed,
-              respondersAvailable: data.stats.responders_available,
-              sheltersAtCapacity: data.stats.shelters_at_capacity,
-              sheltersTotal: data.stats.shelters_total,
+              respondersDeployed: data.stats.responders_deployed ?? data.stats.respondersDeployed,
+              respondersAvailable: data.stats.responders_available ?? data.stats.respondersAvailable,
+              sheltersAtCapacity: data.stats.shelters_at_capacity ?? data.stats.sheltersAtCapacity,
+              sheltersTotal: data.stats.shelters_total ?? data.stats.sheltersTotal,
             });
           }
           setRawZones(prev =>
@@ -314,7 +317,7 @@ export function SentinelProvider({ children }) {
           return;
         }
       } catch (e) {
-        console.error('API assign error, falling back', e);
+        console.error('[SentinelPlan] /api/zones/assign failed, applying local fallback:', e.message);
       }
     }
 
@@ -334,7 +337,9 @@ export function SentinelProvider({ children }) {
   const predictFlood = async (imageFile) => {
     const formData = new FormData();
     formData.append('file', imageFile);
-    const res = await fetch(`${API_BASE_URL}/predict?region=${currentRegionId}`, {
+    const url = `${API_URL}/api/predict?region=${encodeURIComponent(currentRegionId)}`;
+    console.log('[SentinelPlan] predictFlood →', url);
+    const res = await fetch(url, {
       method: 'POST',
       body: formData,
     });
