@@ -7,13 +7,26 @@ import {
 } from '../data/mockData';
 
 const SentinelContext = createContext(null);
-// PRODUCTION FIX: Read API base URL from Vite env variable.
-// On localhost the vite.config.js proxy rewrites /api → http://127.0.0.1:8000
-// so we can safely use a relative /api prefix in dev as well.
-// Set VITE_API_URL on Vercel dashboard: https://coderush2-0-innoventures.onrender.com/api
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL ||
-  'https://coderush2-0-innoventures.onrender.com/api';
+
+// ─── PRODUCTION API URL CONFIG ────────────────────────────────────────────────
+// On Vercel: set VITE_API_URL = https://coderush2-0-innoventures.onrender.com/api
+// On localhost: leave unset — Vite proxy rewrites /api → http://127.0.0.1:8000
+//
+// IMPORTANT: VITE_API_URL must NOT have a trailing slash.
+// Valid values:
+//   https://coderush2-0-innoventures.onrender.com/api   ← production (Vercel)
+//   (unset)                                              ← localhost (uses proxy)
+const API_BASE_URL = (() => {
+  const fromEnv = import.meta.env.VITE_API_URL;
+  if (fromEnv) {
+    const url = fromEnv.replace(/\/$/, ''); // strip trailing slash
+    console.log('[SentinelPlan] API_BASE_URL from env:', url);
+    return url;
+  }
+  // Localhost fallback — Vite proxy handles /api → 127.0.0.1:8000
+  console.log('[SentinelPlan] VITE_API_URL not set, using production fallback');
+  return 'https://coderush2-0-innoventures.onrender.com/api';
+})();
 
 export function normalizeRoad(r) {
   let coords = [];
@@ -138,29 +151,37 @@ export function SentinelProvider({ children }) {
   useEffect(() => {
     async function loadRegions() {
       try {
+        console.log('[SentinelPlan] Fetching regions from:', `${API_BASE_URL}/regions`);
         const res = await fetch(`${API_BASE_URL}/regions`);
         if (res.ok) {
           const list = await res.json();
+          console.log('[SentinelPlan] Regions loaded:', list.length);
           setAvailableRegions(list);
+        } else {
+          console.error('[SentinelPlan] /regions returned HTTP', res.status, res.statusText);
         }
       } catch (e) {
-        console.warn('Could not fetch regions list from API', e);
+        console.error('[SentinelPlan] Could not fetch regions — is the backend reachable?', API_BASE_URL, e.message);
       }
     }
     loadRegions();
   }, []);
 
-  // Fetch state for active region
+  // Fetch state for active region — called on mount and whenever region switches
   const fetchStateForRegion = useCallback(async (regionId) => {
+    const url = `${API_BASE_URL}/state?region=${encodeURIComponent(regionId)}`;
+    console.log('[SentinelPlan] fetchStateForRegion →', url);
     try {
-      const res = await fetch(`${API_BASE_URL}/state?region=${regionId}`);
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
+        console.log('[SentinelPlan] State loaded for region:', regionId, data);
         setApiOnline(true);
         if (data.region) setCurrentRegionMeta(data.region);
         if (data.zones && data.roads) {
           setRoads(data.roads.map(normalizeRoad));
-          setAlerts(data.alerts);
+          // alerts may be undefined for some regions — default to empty array
+          setAlerts(data.alerts || []);
           if (data.stats) {
             setStats({
               respondersDeployed: data.stats.responders_deployed ?? data.stats.respondersDeployed,
@@ -170,10 +191,16 @@ export function SentinelProvider({ children }) {
             });
           }
           setRawZones(data.zones.map((z, idx) => normalizeZone(z, idx)));
+        } else {
+          console.warn('[SentinelPlan] API response missing zones/roads for region:', regionId, data);
         }
+      } else {
+        setApiOnline(false);
+        console.error('[SentinelPlan] /state returned HTTP', res.status, 'for region:', regionId);
       }
     } catch (err) {
-      console.warn('Backend API offline, operating in client fallback mode.', err);
+      setApiOnline(false);
+      console.error('[SentinelPlan] API fetch failed — falling back to mock data. URL:', url, '| Error:', err.message);
     }
   }, []);
 
