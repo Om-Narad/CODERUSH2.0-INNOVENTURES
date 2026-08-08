@@ -24,13 +24,13 @@ class MapErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[#0b0f17] text-white text-center space-y-4 min-h-[400px]">
-          <div className="p-4 bg-rose-950/60 border border-rose-800/60 rounded-2xl">
-            <AlertTriangle className="w-10 h-10 text-rose-400" />
+        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[#f1f5f9] text-slate-800 text-center space-y-4 min-h-[400px]">
+          <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl">
+            <AlertTriangle className="w-10 h-10 text-rose-500" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-white">Map View Render Notice</h2>
-            <p className="text-xs text-slate-400 max-w-md mt-1">
+            <h2 className="text-lg font-bold text-slate-800">Map View Render Notice</h2>
+            <p className="text-xs text-slate-500 max-w-md mt-1">
               {this.state.error?.message || 'Component error occurred while rendering Map View.'}
             </p>
           </div>
@@ -54,7 +54,7 @@ function MainContent() {
   return (
     // PRODUCTION FIX: Use h-screen instead of min-h-screen so the map view
     // gets a fixed, known height — prevents MapLibre container from being 0px tall.
-    <div className="h-screen bg-[#0b0f17] text-slate-100 flex flex-col selection:bg-cyan-500 selection:text-white overflow-hidden">
+    <div className="h-screen bg-[#f1f5f9] text-slate-800 flex flex-col selection:bg-cyan-500 selection:text-white overflow-hidden">
       <Navbar />
       {/* flex-1 + overflow-hidden gives the map a real computed height to render into */}
       <main className="flex-1 flex flex-col overflow-hidden">

@@ -354,26 +354,26 @@ export default function FullMapView() {
   return (
     <div
       style={{ height: 'calc(100vh - 64px)', minHeight: 'calc(100vh - 64px)' }}
-      className="h-[calc(100vh-64px)] w-full flex flex-col relative overflow-hidden bg-[#0b0f17]"
+      className="h-[calc(100vh-64px)] w-full flex flex-col relative overflow-hidden bg-[#f1f5f9]"
     >
       {/* Top Control Bar */}
-      <div className="bg-[#151c28] border-b border-slate-800 px-4 py-2.5 flex items-center justify-between z-10 shadow-md flex-shrink-0">
+      <div className="bg-white border-b border-slate-200 px-4 py-2.5 flex items-center justify-between z-10 shadow-sm flex-shrink-0">
         <div className="flex items-center space-x-3">
-          <div className="flex items-center space-x-2 bg-slate-900 px-3 py-1 rounded-lg border border-slate-800 text-xs">
-            <Info className="w-4 h-4 text-cyan-400" />
-            <span className="text-slate-300">
-              <strong className="text-white">{mapMode === '3d' ? '3D Photorealistic Map' : '2D Tactical View'}:</strong> Click roads to toggle open/blocked · Click zones to view status
+          <div className="flex items-center space-x-2 bg-slate-50 px-3 py-1 rounded-lg border border-slate-200 text-xs">
+            <Info className="w-4 h-4 text-cyan-500" />
+            <span className="text-slate-600">
+              <strong className="text-slate-800">{mapMode === '3d' ? '3D Photorealistic Map' : '2D Tactical View'}:</strong> Click roads to toggle open/blocked · Click zones to view status
             </span>
           </div>
 
           {/* Map Mode Switcher Toggle */}
-          <div className="flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-800 text-xs">
+          <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
             <button
               onClick={() => setMapMode('2d')}
               className={`flex items-center space-x-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
                 mapMode === '2d'
-                  ? 'bg-cyan-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white'
+                  ? 'bg-cyan-500 text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800'
               }`}
             >
               <Layers className="w-3.5 h-3.5" />
@@ -383,8 +383,8 @@ export default function FullMapView() {
               onClick={() => setMapMode('3d')}
               className={`flex items-center space-x-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
                 mapMode === '3d'
-                  ? 'bg-cyan-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white'
+                  ? 'bg-cyan-500 text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800'
               }`}
             >
               <Box className="w-3.5 h-3.5" />
@@ -405,7 +405,7 @@ export default function FullMapView() {
 
           <button
             onClick={() => setSidebarOpen(prev => !prev)}
-            className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:text-cyan-400 hover:border-slate-700 transition-all cursor-pointer"
+            className="p-2 rounded-lg bg-white border border-slate-200 text-slate-500 hover:text-cyan-600 hover:border-cyan-200 transition-all cursor-pointer shadow-sm"
             title={sidebarOpen ? 'Collapse Panel' : 'Expand Panel'}
           >
             {sidebarOpen ? <PanelRightClose className="w-5 h-5" /> : <PanelRightOpen className="w-5 h-5" />}
@@ -429,10 +429,10 @@ export default function FullMapView() {
                 maxZoom={18}
                 zoomControl={true}
                 scrollWheelZoom={true}
-                className="h-full w-full bg-[#0b0f17]"
+                className="h-full w-full bg-slate-100"
               >
                 <TileLayer
-                  url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                  url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
                   subdomains="abcd"
                   attribution="© CartoDB"
                 />
@@ -452,7 +452,7 @@ export default function FullMapView() {
                         mouseout: () => setHoveredFeature(null),
                       }}
                       pathOptions={{
-                        color: isBlocked ? '#ef4444' : '#38bdf8',
+                        color: isBlocked ? '#dc2626' : '#0891b2',
                         weight: isBlocked ? 5 : 4,
                         dashArray: isBlocked ? '6, 8' : null,
                         opacity: 0.9,
@@ -480,10 +480,10 @@ export default function FullMapView() {
                         mouseout: () => setHoveredFeature(null),
                       }}
                       pathOptions={{
-                        color: isSelected ? '#38bdf8' : zone.severityColor,
+                        color: isSelected ? '#0891b2' : zone.severityColor,
                         fillColor: zone.severityColor,
-                        fillOpacity: zone.severity === 'red' ? 0.45 : zone.severity === 'amber' ? 0.3 : 0.2,
-                        weight: isSelected ? 4 : 2,
+                        fillOpacity: zone.severity === 'red' ? 0.4 : zone.severity === 'amber' ? 0.28 : 0.18,
+                        weight: isSelected ? 4 : 2.5,
                       }}
                     />
                   );
@@ -503,30 +503,30 @@ export default function FullMapView() {
 
           {/* Hover Tooltip Overlay */}
           {hoveredFeature && (
-            <div className="absolute bottom-16 left-4 z-20 bg-[#0f1419]/95 border border-slate-700 p-3 rounded-xl backdrop-blur-md shadow-2xl text-xs pointer-events-none">
+            <div className="absolute bottom-16 left-4 z-20 bg-white/95 border border-slate-200 p-3 rounded-xl backdrop-blur-md shadow-lg text-xs pointer-events-none">
               {hoveredFeature.type === 'road' ? (
                 <div className="space-y-1">
-                  <div className="font-bold text-white">{hoveredFeature.name}</div>
-                  <div className={`font-semibold ${hoveredFeature.status === 'blocked' ? 'text-rose-400' : 'text-cyan-400'}`}>
+                  <div className="font-bold text-slate-800">{hoveredFeature.name}</div>
+                  <div className={`font-semibold ${hoveredFeature.status === 'blocked' ? 'text-rose-600' : 'text-cyan-600'}`}>
                     {hoveredFeature.status === 'blocked' ? '⛔ BLOCKED' : '✅ OPEN'} · Click to toggle
                   </div>
                 </div>
               ) : (
                 <div className="space-y-1">
-                  <div className="font-bold text-white">{hoveredFeature.name}</div>
-                  <div className="text-slate-300">
+                  <div className="font-bold text-slate-800">{hoveredFeature.name}</div>
+                  <div className="text-slate-600">
                     Priority: <strong style={{ color: hoveredFeature.severityColor }}>{hoveredFeature.priority}</strong>
                   </div>
-                  <div className="text-slate-400">{hoveredFeature.peopleExposed?.toLocaleString()} people exposed</div>
+                  <div className="text-slate-500">{hoveredFeature.peopleExposed?.toLocaleString()} people exposed</div>
                 </div>
               )}
             </div>
           )}
 
           {/* Map Legend */}
-          <div className="absolute bottom-10 left-4 z-10 bg-[#0f1419]/90 border border-slate-800 p-3 rounded-xl backdrop-blur-md shadow-2xl text-xs space-y-2">
-            <h4 className="font-bold text-slate-400 uppercase text-[10px] tracking-wider">Map Legend</h4>
-            <div className="space-y-1.5 text-slate-300">
+          <div className="absolute bottom-10 left-4 z-10 bg-white/95 border border-slate-200 p-3 rounded-xl backdrop-blur-md shadow-lg text-xs space-y-2">
+            <h4 className="font-bold text-slate-500 uppercase text-[10px] tracking-wider">Map Legend</h4>
+            <div className="space-y-1.5 text-slate-600">
               <div className="flex items-center space-x-2">
                 <span className="w-3 h-3 rounded-full bg-rose-500 animate-pulse inline-block"></span>
                 <span>Critical Zone (Score ≥ 75)</span>
@@ -539,8 +539,8 @@ export default function FullMapView() {
                 <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span>
                 <span>Stable Zone (Score &lt; 50)</span>
               </div>
-              <div className="flex items-center space-x-2 pt-1 border-t border-slate-800">
-                <span className="w-4 h-1 bg-cyan-400 rounded inline-block"></span>
+              <div className="flex items-center space-x-2 pt-1 border-t border-slate-100">
+                <span className="w-4 h-1 bg-cyan-500 rounded inline-block"></span>
                 <span>Open Evacuation Route</span>
               </div>
               <div className="flex items-center space-x-2">
@@ -551,23 +551,23 @@ export default function FullMapView() {
           </div>
 
           {/* Map Mode Badge */}
-          <div className="absolute top-4 right-16 z-10 bg-cyan-950/80 border border-cyan-800/60 text-cyan-300 text-[10px] font-bold px-2.5 py-1 rounded-full backdrop-blur-sm uppercase tracking-wider">
+          <div className="absolute top-4 right-16 z-10 bg-white/95 border border-cyan-200 text-cyan-700 text-[10px] font-bold px-2.5 py-1 rounded-full backdrop-blur-sm uppercase tracking-wider shadow-sm">
             {mapMode === '3d' ? '3D Satellite Active' : '2D Tactical Active'}
           </div>
         </div>
 
         {/* Collapsible Right Sidebar */}
         {sidebarOpen && (
-          <div className="w-96 h-full border-l border-slate-800 bg-[#0b0f17] flex flex-col z-10 shadow-2xl flex-shrink-0">
+          <div className="w-96 h-full border-l border-slate-200 bg-white flex flex-col z-10 shadow-lg flex-shrink-0">
 
             {/* Sidebar Tab Bar */}
-            <div className="flex border-b border-slate-800 bg-[#151c28] flex-shrink-0">
+            <div className="flex border-b border-slate-200 bg-slate-50 flex-shrink-0">
               <button
                 onClick={() => handleTabClick('feed')}
                 className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[11px] font-bold uppercase tracking-wide transition-all cursor-pointer ${
                   sidebarTab === 'feed'
-                    ? 'text-cyan-300 border-b-2 border-cyan-400 bg-cyan-950/20'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
+                    ? 'text-cyan-600 border-b-2 border-cyan-500 bg-white'
+                    : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'
                 }`}
               >
                 <ShieldAlert className="w-3.5 h-3.5" />
@@ -578,8 +578,8 @@ export default function FullMapView() {
                 onClick={() => handleTabClick('sos')}
                 className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[11px] font-bold uppercase tracking-wide transition-all cursor-pointer relative ${
                   sidebarTab === 'sos'
-                    ? 'text-rose-300 border-b-2 border-rose-400 bg-rose-950/20'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
+                    ? 'text-rose-600 border-b-2 border-rose-500 bg-white'
+                    : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'
                 }`}
               >
                 <Siren className="w-3.5 h-3.5" />
@@ -593,7 +593,7 @@ export default function FullMapView() {
             </div>
 
             {/* Sidebar Content */}
-            <div className="flex-1 overflow-y-auto p-3">
+            <div className="flex-1 overflow-y-auto p-3 bg-[#f1f5f9]">
               {sidebarTab === 'feed' ? (
                 <PriorityActionFeed />
               ) : (
@@ -632,13 +632,13 @@ function SidebarSosPanel() {
   return (
     <div className="space-y-3">
       {sosNotification && (
-        <div className="flex items-center gap-2 p-3 rounded-xl border border-rose-600/50 bg-rose-950/40 text-xs">
-          <Siren className="w-4 h-4 text-rose-400 animate-pulse flex-shrink-0" />
+        <div className="flex items-center gap-2 p-3 rounded-xl border border-rose-200 bg-rose-50 text-xs">
+          <Siren className="w-4 h-4 text-rose-600 animate-pulse flex-shrink-0" />
           <div className="flex-1 min-w-0">
-            <div className="font-bold text-rose-200">Alert Sent!</div>
-            <div className="text-rose-300/70 truncate">{sosNotification.zoneName}</div>
+            <div className="font-bold text-rose-700">Alert Sent!</div>
+            <div className="text-rose-500 truncate">{sosNotification.zoneName}</div>
           </div>
-          <button onClick={dismissSosNotification} className="text-rose-400 hover:text-white cursor-pointer">
+          <button onClick={dismissSosNotification} className="text-rose-400 hover:text-rose-700 cursor-pointer transition-colors">
             ✕
           </button>
         </div>
@@ -650,10 +650,10 @@ function SidebarSosPanel() {
         disabled={massSending || criticalZones.length === 0}
         className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95 border ${
           massSending
-            ? 'bg-emerald-700/20 border-emerald-600/40 text-emerald-300 cursor-not-allowed'
+            ? 'bg-emerald-50 border-emerald-200 text-emerald-700 cursor-not-allowed'
             : criticalZones.length === 0
-              ? 'bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed'
-              : 'bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white border-rose-500/40 shadow-lg shadow-rose-900/30 cursor-pointer'
+              ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+              : 'bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white border-rose-400/50 shadow-md shadow-rose-200 cursor-pointer'
         }`}
       >
         <Siren className="w-3.5 h-3.5" />
@@ -661,7 +661,7 @@ function SidebarSosPanel() {
       </button>
 
       <div className="space-y-2">
-        <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1">
+        <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-1">
           Affected Zones ({affectedZones.length})
         </h3>
         {affectedZones.map(zone => {
@@ -669,22 +669,22 @@ function SidebarSosPanel() {
           return (
             <div
               key={zone.id}
-              className={`rounded-xl border p-3 text-xs ${
+              className={`rounded-xl border p-3 text-xs bg-white ${
                 isCritical
-                  ? 'border-rose-700/50 bg-rose-950/20'
-                  : 'border-amber-700/40 bg-amber-950/15'
+                  ? 'border-rose-200'
+                  : 'border-amber-200'
               }`}
             >
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-1.5 min-w-0">
                   <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isCritical ? 'bg-rose-500 animate-pulse' : 'bg-amber-500'}`} />
-                  <span className="font-bold text-white text-[11px] truncate">{zone.name}</span>
+                  <span className="font-bold text-slate-800 text-[11px] truncate">{zone.name}</span>
                 </div>
                 <span className="text-[10px] font-bold flex-shrink-0" style={{ color: zone.severityColor }}>
                   P{zone.priority}
                 </span>
               </div>
-              <div className="text-slate-400 mb-2">
+              <div className="text-slate-500 mb-2">
                 {zone.peopleExposed.toLocaleString()} exposed · {zone.roadsOpen}/{zone.totalRoads} routes open
               </div>
               <button
@@ -706,18 +706,18 @@ function SidebarSosPanel() {
 
       {sosAlerts.length > 0 && (
         <div>
-          <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 mb-2">
+          <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-1 mb-2">
             Alert History ({sosAlerts.length})
           </h3>
           <div className="space-y-1.5 max-h-60 overflow-y-auto">
             {sosAlerts.slice(0, 10).map(entry => (
               <div
                 key={entry.id}
-                className="flex items-start gap-2 p-2 rounded-lg border border-slate-800/60 bg-slate-900/40 text-[11px]"
+                className="flex items-start gap-2 p-2 rounded-lg border border-rose-100 bg-rose-50 text-[11px]"
               >
-                <Siren className="w-3.5 h-3.5 text-rose-400 flex-shrink-0 mt-0.5" />
+                <Siren className="w-3.5 h-3.5 text-rose-500 flex-shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-white truncate">{entry.zoneName}</div>
+                  <div className="font-semibold text-slate-800 truncate">{entry.zoneName}</div>
                   <div className="text-slate-500">{entry.timestamp}</div>
                 </div>
               </div>
