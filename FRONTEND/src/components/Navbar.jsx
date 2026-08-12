@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useSentinel } from '../context/SentinelContext';
-import { Shield, LayoutDashboard, MapPin, AlertTriangle, Activity, Globe, ChevronDown, Check, Siren } from 'lucide-react';
+import { Shield, LayoutDashboard, MapPin, AlertTriangle, Activity, Globe, ChevronDown, Check, Siren, LogIn } from 'lucide-react';
 
 export default function Navbar() {
   const {
@@ -182,6 +182,20 @@ export default function Navbar() {
                 {criticalZoneCount}
               </span>
             )}
+          </button>
+
+          {/* Auth (Login / Signup) Tab */}
+          <button
+            id="nav-auth-btn"
+            onClick={() => setCurrentView('login')}
+            className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 cursor-pointer ${
+              currentView === 'login' || currentView === 'signup'
+                ? 'bg-white text-blue-600 border border-slate-200 shadow-sm font-bold'
+                : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'
+            }`}
+          >
+            <LogIn className="w-3.5 h-3.5 text-blue-600" />
+            <span>Sign In / Auth</span>
           </button>
         </nav>
 

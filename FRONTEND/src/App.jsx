@@ -4,6 +4,7 @@ import Navbar from './components/Navbar';
 import DashboardView from './components/DashboardView';
 import FullMapView from './components/FullMapView';
 import SOSAlertsPanel from './components/SOSAlertsPanel';
+import AuthPage from './components/auth/AuthPage';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 
 // Error Boundary to prevent white/black blank screen crashes
@@ -49,7 +50,17 @@ class MapErrorBoundary extends React.Component {
 }
 
 function MainContent() {
-  const { currentView } = useSentinel();
+  const { currentView, setCurrentView } = useSentinel();
+
+  if (currentView === 'login' || currentView === 'signup') {
+    return (
+      <AuthPage
+        initialMode={currentView}
+        onLoginSuccess={() => setCurrentView('dashboard')}
+        onGoToDashboard={() => setCurrentView('dashboard')}
+      />
+    );
+  }
 
   return (
     // PRODUCTION FIX: Use h-screen instead of min-h-screen so the map view
