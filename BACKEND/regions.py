@@ -12,13 +12,13 @@ import json
 
 REGIONS_METADATA = [
     {
-        "id": "assam",
-        "name": "Guwahati & Brahmaputra Basin",
+        "id": "nagpur",
+        "name": "Nagpur Flood Command Center",
         "country": "India",
-        "center": [26.185, 91.745],
+        "center": [21.1458, 79.0882],
         "zoom": 12,
         "hazard_level": "Critical",
-        "description": "Monsoon Brahmaputra river overflow affecting North Guwahati sectors and Kamrup transit corridors.",
+        "description": "Monsoon Nag River & Pili River overflow affecting Ambazari Lowlands and Sitabuldi transit corridors.",
         "alert_count": 3
     },
     {
@@ -76,59 +76,63 @@ REGIONS_METADATA = [
 # ─── REGION DATASETS ─────────────────────────────────────────────────────────
 
 MULTI_REGION_DATA = {
-    "assam": {
+    "nagpur": {
         "zones": [
             {
                 "id": "zone-1",
-                "name": "Guwahati North Lowlands (Sector 7)",
-                "geometry": {"type": "Polygon", "coordinates": [[[91.725, 26.195], [91.732, 26.212], [91.750, 26.208], [91.745, 26.190], [91.725, 26.195]]]},
-                "people_exposed": 2400,
+                "name": "Ambazari & Subhash Nagar Lowlands",
+                "geometry": {"type": "Polygon", "coordinates": [[[79.035, 21.125], [79.042, 21.142], [79.060, 21.138], [79.052, 21.120], [79.035, 21.125]]]},
+                "people_exposed": 3200,
+                "houses_exposed": 640,
                 "status": "pending",
                 "assigned_squad": None,
-                "assigned_shelter": "Saraighat Relief Center"
+                "assigned_shelter": "Ambazari Relief Center"
             },
             {
                 "id": "zone-2",
-                "name": "Brahmaputra River Basin East",
-                "geometry": {"type": "Polygon", "coordinates": [[[91.752, 26.182], [91.758, 26.202], [91.782, 26.192], [91.775, 26.172], [91.752, 26.182]]]},
-                "people_exposed": 1600,
+                "name": "Nag River Central Corridor (Sitabuldi)",
+                "geometry": {"type": "Polygon", "coordinates": [[[79.075, 21.145], [79.082, 21.162], [79.100, 21.155], [79.092, 21.138], [79.075, 21.145]]]},
+                "people_exposed": 2400,
+                "houses_exposed": 480,
                 "status": "pending",
                 "assigned_squad": None,
-                "assigned_shelter": "St. Jude High School"
+                "assigned_shelter": "Mankapur Sports Complex"
             },
             {
                 "id": "zone-3",
-                "name": "Kamrup Central Transit Hub",
-                "geometry": {"type": "Polygon", "coordinates": [[[91.730, 26.155], [91.735, 26.175], [91.752, 26.170], [91.745, 26.150], [91.730, 26.155]]]},
-                "people_exposed": 1100,
+                "name": "Pili River North Basin (Kalamna)",
+                "geometry": {"type": "Polygon", "coordinates": [[[79.100, 21.175], [79.108, 21.192], [79.125, 21.188], [79.118, 21.168], [79.100, 21.175]]]},
+                "people_exposed": 1800,
+                "houses_exposed": 360,
                 "status": "pending",
                 "assigned_squad": None,
-                "assigned_shelter": "Guwahati Stadium Complex"
+                "assigned_shelter": "Resimbagh Civic Center"
             },
             {
                 "id": "zone-4",
-                "name": "Kaziranga Foothills Reserve",
-                "geometry": {"type": "Polygon", "coordinates": [[[91.702, 26.202], [91.710, 26.222], [91.728, 26.212], [91.718, 26.195], [91.702, 26.202]]]},
-                "people_exposed": 700,
+                "name": "Gorewada Catchment & Wardha Road Link",
+                "geometry": {"type": "Polygon", "coordinates": [[[79.040, 21.100], [79.048, 21.118], [79.065, 21.112], [79.058, 21.095], [79.040, 21.100]]]},
+                "people_exposed": 950,
+                "houses_exposed": 190,
                 "status": "pending",
                 "assigned_squad": None,
-                "assigned_shelter": "Civic Hospital Shelter"
+                "assigned_shelter": "Sitabuldi Community Shelter"
             }
         ],
         "roads": [
-            {"id": "road-1", "name": "NH-27 Brahmaputra Arterial Highway", "status": "open", "connects_zone_ids": ["zone-1", "zone-3"], "geometry": {"type": "LineString", "coordinates": [[91.748, 26.155], [91.745, 26.165], [91.742, 26.185], [91.738, 26.202]]}},
-            {"id": "road-2", "name": "Saraighat River Bridge Expressway", "status": "open", "connects_zone_ids": ["zone-1", "zone-2"], "geometry": {"type": "LineString", "coordinates": [[91.738, 26.202], [91.752, 26.198], [91.765, 26.195]]}},
-            {"id": "road-3", "name": "East Guwahati Bypass Corridor", "status": "open", "connects_zone_ids": ["zone-2"], "geometry": {"type": "LineString", "coordinates": [[91.765, 26.195], [91.778, 26.182], [91.785, 26.170]]}},
-            {"id": "road-4", "name": "Metro Central Link", "status": "open", "connects_zone_ids": ["zone-2"], "geometry": {"type": "LineString", "coordinates": [[91.745, 26.165], [91.758, 26.175], [91.765, 26.195]]}},
-            {"id": "road-5", "name": "South Bank Emergency Pass", "status": "open", "connects_zone_ids": ["zone-3"], "geometry": {"type": "LineString", "coordinates": [[91.740, 26.148], [91.742, 26.158], [91.745, 26.165]]}},
-            {"id": "road-6", "name": "West Guwahati Feeder", "status": "open", "connects_zone_ids": ["zone-3", "zone-4"], "geometry": {"type": "LineString", "coordinates": [[91.745, 26.165], [91.728, 26.185], [91.715, 26.210]]}},
-            {"id": "road-7", "name": "Kaziranga Reserve Pass", "status": "open", "connects_zone_ids": ["zone-4"], "geometry": {"type": "LineString", "coordinates": [[91.715, 26.210], [91.705, 26.225], [91.698, 26.238]]}}
+            {"id": "road-1", "name": "Wardha Road Highway Corridor (NH-44)", "status": "open", "connects_zone_ids": ["zone-1", "zone-4"], "geometry": {"type": "LineString", "coordinates": [[79.055, 21.090], [79.060, 21.115], [79.065, 21.135], [79.075, 21.150]]}},
+            {"id": "road-2", "name": "Ambazari Lake Spillway Expressway", "status": "open", "connects_zone_ids": ["zone-1", "zone-2"], "geometry": {"type": "LineString", "coordinates": [[79.045, 21.130], [79.060, 21.140], [79.075, 21.148]]}},
+            {"id": "road-3", "name": "Nag River Urban Bypass Corridor", "status": "open", "connects_zone_ids": ["zone-2"], "geometry": {"type": "LineString", "coordinates": [[79.075, 21.148], [79.090, 21.155], [79.105, 21.165]]}},
+            {"id": "road-4", "name": "Sitabuldi Central Metro Arterial", "status": "open", "connects_zone_ids": ["zone-2"], "geometry": {"type": "LineString", "coordinates": [[79.065, 21.135], [79.080, 21.145], [79.090, 21.155]]}},
+            {"id": "road-5", "name": "Kamptee Highway Emergency Pass (NH-53)", "status": "open", "connects_zone_ids": ["zone-3"], "geometry": {"type": "LineString", "coordinates": [[79.105, 21.165], [79.115, 21.180], [79.130, 21.195]]}},
+            {"id": "road-6", "name": "Hingna Ring Road Feeder", "status": "open", "connects_zone_ids": ["zone-1", "zone-4"], "geometry": {"type": "LineString", "coordinates": [[79.025, 21.110], [79.040, 21.125], [79.055, 21.135]]}},
+            {"id": "road-7", "name": "Gorewada Dam Bypass Pass", "status": "open", "connects_zone_ids": ["zone-4"], "geometry": {"type": "LineString", "coordinates": [[79.030, 21.170], [79.045, 21.185], [79.055, 21.195]]}}
         ],
-        "stats": {"responders_deployed": 12, "responders_available": 20, "shelters_at_capacity": 2, "shelters_total": 5},
+        "stats": {"responders_deployed": 14, "responders_available": 22, "shelters_at_capacity": 2, "shelters_total": 5},
         "alerts": [
-            {"id": "alert-a1", "timestamp": "2026-08-07T14:28:10Z", "message": "Assam Monitoring Active — Brahmaputra telemetry online across Saraighat and Kamrup sectors."},
-            {"id": "alert-a2", "timestamp": "2026-08-07T14:30:45Z", "message": "Saraighat Gauge Station — Surge measured +1.8m above danger mark."},
-            {"id": "alert-a3", "timestamp": "2026-08-07T14:32:00Z", "message": "CRITICAL — Sector 7 Guwahati North Lowlands inundation priority score evaluated to 84 (Critical)."}
+            {"id": "alert-a1", "timestamp": "2026-08-14T14:28:10Z", "message": "Nagpur Telemetry Active — Nag River & Pili River flood monitoring online across NMC sectors."},
+            {"id": "alert-a2", "timestamp": "2026-08-14T14:30:45Z", "message": "Sitabuldi Gauge Station — Surge measured +1.6m above danger level."},
+            {"id": "alert-a3", "timestamp": "2026-08-14T14:32:00Z", "message": "CRITICAL — Ambazari & Subhash Nagar Lowlands inundation priority score evaluated to 85 (Critical)."}
         ]
     },
     "bangladesh": {
@@ -267,7 +271,7 @@ MULTI_REGION_DATA = {
         "zones": [
             {
                 "id": "zone-g1",
-                "name": "South Asia Monsoon Flood Zone (Brahmaputra/Surma)",
+                "name": "South Asia Monsoon Flood Zone (Nag River/Surma)",
                 "geometry": {"type": "Polygon", "coordinates": [[[88.0, 24.0], [92.0, 27.0], [95.0, 26.0], [91.0, 23.0], [88.0, 24.0]]]},
                 "people_exposed": 125000,
                 "status": "pending",

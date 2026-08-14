@@ -6,8 +6,6 @@
  * with optional 3D Photorealistic Satellite View (MapLibre GL JS) toggle.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import * as maplibregl from 'maplibre-gl';
-import 'maplibre-gl/dist/maplibre-gl.css';
 import { MapContainer, TileLayer, Polygon, Polyline, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -24,8 +22,6 @@ import {
   Box,
   Layers,
 } from 'lucide-react';
-
-const getMaplib = () => maplibregl;
 
 // ─── GeoJSON Helpers ──────────────────────────────────────────────────────────
 
@@ -206,8 +202,8 @@ export default function FullMapView() {
   const [hoveredFeature, setHoveredFeature] = useState(null);
 
   const criticalZoneCount = zones.filter(z => z.severity === 'red').length;
-  const center = currentRegionMeta?.center || [26.185, 91.745];
-  const regionId = currentRegionMeta?.id || 'assam';
+  const center = currentRegionMeta?.center || [21.1458, 79.0882];
+  const regionId = currentRegionMeta?.id || 'nagpur';
 
   // ── Initialize MapLibre 3D Map (when 3D mode is toggled) ───────────────────
   useEffect(() => {

@@ -50,24 +50,22 @@ class MapErrorBoundary extends React.Component {
 }
 
 function MainContent() {
-  const { currentView, setCurrentView } = useSentinel();
+  const { currentView, setCurrentView, isAuthenticated, login } = useSentinel();
 
-  if (currentView === 'login' || currentView === 'signup') {
+  // Simple Protection: If not logged in, force Login / Signup page
+  if (!isAuthenticated || currentView === 'login' || currentView === 'signup') {
     return (
       <AuthPage
-        initialMode={currentView}
-        onLoginSuccess={() => setCurrentView('dashboard')}
-        onGoToDashboard={() => setCurrentView('dashboard')}
+        initialMode={currentView === 'signup' ? 'signup' : 'login'}
+        onLoginSuccess={(user) => login(user)}
+        onGoToDashboard={isAuthenticated ? () => setCurrentView('dashboard') : null}
       />
     );
   }
 
   return (
-    // PRODUCTION FIX: Use h-screen instead of min-h-screen so the map view
-    // gets a fixed, known height — prevents MapLibre container from being 0px tall.
     <div className="h-screen bg-[#f1f5f9] text-slate-800 flex flex-col selection:bg-cyan-500 selection:text-white overflow-hidden">
       <Navbar />
-      {/* flex-1 + overflow-hidden gives the map a real computed height to render into */}
       <main className="flex-1 flex flex-col overflow-hidden">
         {currentView === 'dashboard' && <DashboardView />}
         {currentView === 'map' && (

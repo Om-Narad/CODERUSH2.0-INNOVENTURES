@@ -33,7 +33,7 @@ export default function StatCards() {
         </div>
         <p className="text-[11px] text-slate-500 mt-2 flex items-center space-x-1">
           <span className="inline-block w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
-          <span>Flood surge active in River Valley</span>
+          <span>Nag & Pili River flood surge active</span>
         </p>
       </div>
 

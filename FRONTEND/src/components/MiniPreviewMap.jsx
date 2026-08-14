@@ -39,7 +39,7 @@ function FitMiniBounds({ zones, regionMeta }) {
 export default function MiniPreviewMap() {
   const { zones, roads, currentRegionMeta, setCurrentView } = useSentinel();
 
-  const center = currentRegionMeta?.center || [26.185, 91.742];
+  const center = currentRegionMeta?.center || [21.1458, 79.0882];
 
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col h-full shadow-sm relative group">
@@ -52,7 +52,7 @@ export default function MiniPreviewMap() {
           </div>
           <div>
             <h2 className="text-sm font-bold text-slate-800 tracking-wide uppercase">Zone Preview Map</h2>
-            <p className="text-[11px] text-slate-500">{currentRegionMeta?.name || 'Assam Sector'} Polygons</p>
+            <p className="text-[11px] text-slate-500">{currentRegionMeta?.name || 'Nagpur Sector'} Polygons</p>
           </div>
         </div>
         <button

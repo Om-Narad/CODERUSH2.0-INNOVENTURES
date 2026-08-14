@@ -8,25 +8,13 @@ import {
 
 const SentinelContext = createContext(null);
 
-// ─── PRODUCTION API URL ────────────────────────────────────────────────────────
-// Set VITE_API_URL in your Vercel project environment variables:
-//   VITE_API_URL = https://coderush2-0-innoventures.onrender.com
-//
-// Do NOT include a trailing slash or /api — the code appends /api/... to each call.
-//
-// On localhost: leave VITE_API_URL unset. Vite's dev proxy (vite.config.js)
-// transparently forwards /api/* requests to http://127.0.0.1:8000.
 const API_URL = (() => {
   const fromEnv = import.meta.env.VITE_API_URL;
   if (fromEnv) {
-    const url = fromEnv.replace(/\/+$/, ''); // strip any trailing slashes
+    const url = fromEnv.replace(/\/+$/, '');
     console.log('[SentinelPlan] API_URL resolved from VITE_API_URL:', url);
     return url;
   }
-  // No env var set → use the production backend URL as the hardcoded fallback.
-  // Fetch calls below all include /api/... in their path so this will hit:
-  //   https://coderush2-0-innoventures.onrender.com/api/regions   etc.
-  console.log('[SentinelPlan] VITE_API_URL not set — using hardcoded production fallback');
   return 'https://coderush2-0-innoventures.onrender.com';
 })();
 
@@ -57,12 +45,16 @@ export function normalizeZone(z, idx) {
     coords = fallback.geometry;
   }
 
+  const people = z.people_exposed ?? z.peopleExposed ?? fallback.peopleExposed ?? 1000;
+  const houses = z.houses_exposed ?? z.housesExposed ?? fallback.housesExposed ?? Math.round(people / 5);
+
   return {
     id: z.id,
     name: z.name,
-    peopleExposed: z.people_exposed ?? z.peopleExposed ?? fallback.peopleExposed ?? 1000,
+    peopleExposed: people,
+    housesExposed: houses,
     status: (z.status === 'assigned' || z.status === 'Assigned') ? 'Assigned' : 'Pending',
-    recommendedResponders: Math.max(2, Math.round((z.people_exposed ?? z.peopleExposed ?? fallback.peopleExposed ?? 1000) / 400)),
+    recommendedResponders: Math.max(2, Math.round(people / 400)),
     assignedSquad: z.assigned_squad || z.assignedSquad || fallback.assignedSquad || `Squad Delta-${idx + 1} (Standby)`,
     assignedRespondersCount: (z.status === 'assigned' || z.status === 'Assigned') ? 3 : 0,
     roadIds: z.roadIds || fallback.roadIds || ['road-1', 'road-2'],
@@ -124,86 +116,128 @@ export function computeZonePriority(zone, roadsList) {
 }
 
 export function SentinelProvider({ children }) {
-  const [currentView, setCurrentView] = useState('dashboard');
-  const [currentRegionId, setCurrentRegionId] = useState('assam');
-  const [currentRegionMeta, setCurrentRegionMeta] = useState({
-    id: 'assam',
-    name: 'Guwahati & Brahmaputra Basin',
-    country: 'India',
-    center: [26.185, 91.745],
-    zoom: 12,
-    hazard_level: 'Critical'
+  // Authentication State
+  const [user, setUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('sentinel_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
   });
-  const [availableRegions, setAvailableRegions] = useState([]);
+
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return !!localStorage.getItem('sentinel_token');
+  });
+
+  // Current view defaults to login if unauthenticated, dashboard if logged in
+  const [currentView, setCurrentView] = useState(() => {
+    return localStorage.getItem('sentinel_token') ? 'dashboard' : 'login';
+  });
+
+  // Default Region: Exclusive to Nagpur (Maharashtra, India)
+  const [currentRegionId, setCurrentRegionId] = useState('nagpur');
+  const [currentRegionMeta, setCurrentRegionMeta] = useState({
+    id: 'nagpur',
+    name: 'Nagpur Flood Command Center',
+    city: 'Nagpur',
+    state: 'Maharashtra',
+    country: 'India',
+    center: [21.1458, 79.0882],
+    zoom: 12,
+    hazard_level: 'Critical',
+    description: 'Real-time Nag River & Pili River flood monitoring across Nagpur Municipal Corporation (NMC) sectors.'
+  });
+
+  const [availableRegions, setAvailableRegions] = useState([
+    {
+      id: 'nagpur',
+      name: 'Nagpur Flood Command Center',
+      city: 'Nagpur',
+      state: 'Maharashtra',
+      country: 'India',
+      hazard_level: 'Critical',
+    }
+  ]);
+
   const [roads, setRoads] = useState(() => INITIAL_ROADS.map(normalizeRoad));
   const [alerts, setAlerts] = useState(INITIAL_ALERTS);
   const [stats, setStats] = useState(INITIAL_STATS);
   const [selectedZoneId, setSelectedZoneId] = useState(null);
   const [rawZones, setRawZones] = useState(() => INITIAL_ZONES.map((z, idx) => normalizeZone(z, idx)));
   const [apiOnline, setApiOnline] = useState(false);
-  const [gdacsLiveFeed, setGdacsLiveFeed] = useState([]);
 
-  // ─── SOS Alert System State ────────────────────────────────────────────────
-  // sosAlerts: history of all SOS alerts sent (persisted during session)
+  // SOS Alert System State
   const [sosAlerts, setSosAlerts] = useState([]);
-  // sosNotification: transient toast message shown after sending SOS
   const [sosNotification, setSosNotification] = useState(null);
 
-  // Fetch available regions at startup
-  useEffect(() => {
-    async function loadRegions() {
-      const url = `${API_URL}/api/regions`;
-      try {
-        console.log('[SentinelPlan] Fetching regions from:', url);
-        const res = await fetch(url);
-        if (res.ok) {
-          const list = await res.json();
-          console.log('[SentinelPlan] Regions loaded:', list.length);
-          setAvailableRegions(list);
-        } else {
-          console.error('[SentinelPlan] /api/regions returned HTTP', res.status, res.statusText);
-        }
-      } catch (e) {
-        console.error('[SentinelPlan] Could not fetch regions — backend unreachable?', url, e.message);
-      }
-    }
-    loadRegions();
+  // Login handler
+  const login = useCallback((userData) => {
+    const userObj = userData || {
+      name: 'Commander Rajesh Sharma',
+      email: 'officer.nagpur@sentinelplan.gov.in',
+      role: 'Nagpur Disaster Response Officer',
+      org: 'Nagpur Municipal Corporation (NMC)',
+    };
+    setUser(userObj);
+    setIsAuthenticated(true);
+    localStorage.setItem('sentinel_user', JSON.stringify(userObj));
+    localStorage.setItem('sentinel_token', 'token_nagpur_' + Date.now());
+    setCurrentView('dashboard');
   }, []);
 
-  // Fetch state for active region — called on mount and on every region switch
+  // Logout handler
+  const logout = useCallback(() => {
+    setUser(null);
+    setIsAuthenticated(false);
+    localStorage.removeItem('sentinel_user');
+    localStorage.removeItem('sentinel_token');
+    setCurrentView('login');
+  }, []);
+
+  // Protect view switching
+  const setProtectedView = useCallback((view) => {
+    if (!isAuthenticated && view !== 'login' && view !== 'signup') {
+      setCurrentView('login');
+    } else {
+      setCurrentView(view);
+    }
+  }, [isAuthenticated]);
+
+  // Fetch state for region (falls back cleanly to local Nagpur data if backend offline)
   const fetchStateForRegion = useCallback(async (regionId) => {
     const url = `${API_URL}/api/state?region=${encodeURIComponent(regionId)}`;
-    console.log('[SentinelPlan] fetchStateForRegion →', url);
     try {
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
-        console.log('[SentinelPlan] State loaded for region:', regionId, data);
         setApiOnline(true);
-        if (data.region) setCurrentRegionMeta(data.region);
+        if (data.region) {
+          setCurrentRegionMeta({
+            ...data.region,
+            name: 'Nagpur Flood Command Center',
+            center: [21.1458, 79.0882],
+          });
+        }
         if (data.zones && data.roads) {
           setRoads(data.roads.map(normalizeRoad));
-          // alerts may be absent for some regions — default to empty array
-          setAlerts(data.alerts || []);
+          setAlerts(data.alerts || INITIAL_ALERTS);
           if (data.stats) {
             setStats({
-              respondersDeployed: data.stats.responders_deployed ?? data.stats.respondersDeployed,
-              respondersAvailable: data.stats.responders_available ?? data.stats.respondersAvailable,
-              sheltersAtCapacity: data.stats.shelters_at_capacity ?? data.stats.sheltersAtCapacity,
-              sheltersTotal: data.stats.shelters_total ?? data.stats.sheltersTotal,
+              respondersDeployed: data.stats.responders_deployed ?? data.stats.respondersDeployed ?? INITIAL_STATS.respondersDeployed,
+              respondersAvailable: data.stats.responders_available ?? data.stats.respondersAvailable ?? INITIAL_STATS.respondersAvailable,
+              sheltersAtCapacity: data.stats.shelters_at_capacity ?? data.stats.sheltersAtCapacity ?? INITIAL_STATS.sheltersAtCapacity,
+              sheltersTotal: data.stats.shelters_total ?? data.stats.sheltersTotal ?? INITIAL_STATS.sheltersTotal,
+              housesExposed: INITIAL_STATS.housesExposed,
             });
           }
           setRawZones(data.zones.map((z, idx) => normalizeZone(z, idx)));
-        } else {
-          console.warn('[SentinelPlan] API response missing zones/roads for region:', regionId, data);
         }
       } else {
         setApiOnline(false);
-        console.error('[SentinelPlan] /api/state returned HTTP', res.status, 'for region:', regionId);
       }
-    } catch (err) {
+    } catch {
       setApiOnline(false);
-      console.error('[SentinelPlan] /api/state fetch failed. URL:', url, '| Error:', err.message);
     }
   }, []);
 
@@ -237,7 +271,7 @@ export function SentinelProvider({ children }) {
           return;
         }
       } catch (e) {
-        console.error('[SentinelPlan] /api/roads/toggle failed, applying local fallback:', e.message);
+        console.error('[SentinelPlan] toggle failed, local fallback applied:', e.message);
       }
     }
 
@@ -259,7 +293,7 @@ export function SentinelProvider({ children }) {
     const newAlert = {
       id: `alert-${Date.now()}`,
       timestamp: getFormattedTime(),
-      message: `${getFormattedTime()} — Road ${toggledRoadName} ${newStatus}, ${affectedZones.length} zones re-prioritized`,
+      message: `${getFormattedTime()} — Road ${toggledRoadName} ${newStatus}, ${affectedZones.length} Nagpur zones re-prioritized`,
       type: newStatus === 'blocked' ? 'warning' : 'info',
     };
     setAlerts(prev => [newAlert, ...prev]);
@@ -276,7 +310,7 @@ export function SentinelProvider({ children }) {
           return;
         }
       } catch (e) {
-        console.error('[SentinelPlan] /api/simulate failed, applying local fallback:', e.message);
+        console.error('[SentinelPlan] simulate failed, local fallback applied:', e.message);
       }
     }
 
@@ -317,7 +351,7 @@ export function SentinelProvider({ children }) {
           return;
         }
       } catch (e) {
-        console.error('[SentinelPlan] /api/zones/assign failed, applying local fallback:', e.message);
+        console.error('[SentinelPlan] assign failed, local fallback applied:', e.message);
       }
     }
 
@@ -338,7 +372,6 @@ export function SentinelProvider({ children }) {
     const formData = new FormData();
     formData.append('file', imageFile);
     const url = `${API_URL}/api/predict?region=${encodeURIComponent(currentRegionId)}`;
-    console.log('[SentinelPlan] predictFlood →', url);
     const res = await fetch(url, {
       method: 'POST',
       body: formData,
@@ -353,14 +386,6 @@ export function SentinelProvider({ children }) {
     return result;
   };
 
-  // ─── SOS Alert Functions ───────────────────────────────────────────────────
-
-  /**
-   * sendSosAlert — sends an SOS alert for a single zone.
-   * Creates a timestamped entry in sosAlerts history and shows a toast notification.
-   * @param {string} zoneId - The ID of the zone to alert
-   * @param {object[]} currentZones - The live computed zones array (passed in to avoid stale closure)
-   */
   const sendSosAlert = useCallback((zoneId, currentZones) => {
     const zone = (currentZones || []).find(z => z.id === zoneId);
     if (!zone) return;
@@ -375,13 +400,11 @@ export function SentinelProvider({ children }) {
       severity: zone.severity,
       severityColor: zone.severityColor,
       timestamp,
-      message: `SOS Alert dispatched to ${zone.peopleExposed.toLocaleString()} residents in ${zone.name}`,
+      message: `SOS Alert dispatched to ${zone.peopleExposed.toLocaleString()} residents in ${zone.name}, Nagpur`,
     };
 
-    // Add to SOS history
     setSosAlerts(prev => [sosEntry, ...prev]);
 
-    // Show toast notification (auto-dismiss after 4 seconds)
     setSosNotification({
       id: sosEntry.id,
       zoneName: zone.name,
@@ -391,19 +414,15 @@ export function SentinelProvider({ children }) {
       setSosNotification(null);
     }, 4000);
 
-    // Add to the main system alerts log as well
     const systemAlert = {
       id: `alert-sos-${Date.now()}`,
       timestamp,
-      message: `🚨 SOS ALERT SENT — ${zone.name} (Priority ${zone.priority}): Notifying ${zone.peopleExposed.toLocaleString()} residents to evacuate immediately.`,
+      message: `🚨 SOS ALERT SENT — ${zone.name} (Priority ${zone.priority}): Emergency evacuation notice sent to ${zone.peopleExposed.toLocaleString()} Nagpur residents.`,
       type: 'critical',
     };
     setAlerts(prev => [systemAlert, ...prev]);
   }, []);
 
-  /**
-   * sendMassSos — sends SOS alerts to all Critical (red severity) zones at once.
-   */
   const sendMassSos = useCallback((currentZones) => {
     const criticalZones = (currentZones || []).filter(z => z.severity === 'red');
     if (criticalZones.length === 0) return;
@@ -427,25 +446,21 @@ export function SentinelProvider({ children }) {
     const totalPeople = criticalZones.reduce((sum, z) => sum + z.peopleExposed, 0);
     setSosNotification({
       id: `mass-${Date.now()}`,
-      zoneName: `ALL ${criticalZones.length} Critical Zones`,
+      zoneName: `ALL ${criticalZones.length} Critical Zones (Nagpur)`,
       peopleExposed: totalPeople,
       isMass: true,
     });
     setTimeout(() => setSosNotification(null), 5000);
 
-    // Add mass SOS to main alerts log
     const systemAlert = {
       id: `alert-mass-sos-${Date.now()}`,
       timestamp,
-      message: `🚨 MASS SOS DISPATCHED — ${criticalZones.length} critical zones, ${totalPeople.toLocaleString()} residents alerted across ${criticalZones.map(z => z.name).join(', ')}.`,
+      message: `🚨 MASS SOS DISPATCHED — ${criticalZones.length} critical zones, ${totalPeople.toLocaleString()} residents alerted across Nagpur sectors.`,
       type: 'critical',
     };
     setAlerts(prev => [systemAlert, ...prev]);
   }, []);
 
-  /**
-   * dismissSosNotification — manually dismiss the SOS toast.
-   */
   const dismissSosNotification = useCallback(() => {
     setSosNotification(null);
   }, []);
@@ -453,8 +468,12 @@ export function SentinelProvider({ children }) {
   return (
     <SentinelContext.Provider
       value={{
+        user,
+        isAuthenticated,
+        login,
+        logout,
         currentView,
-        setCurrentView,
+        setCurrentView: setProtectedView,
         currentRegionId,
         currentRegionMeta,
         availableRegions,
@@ -470,7 +489,6 @@ export function SentinelProvider({ children }) {
         assignResponders,
         predictFlood,
         apiOnline,
-        // SOS Alert System
         sosAlerts,
         sosNotification,
         sendSosAlert,

@@ -3,12 +3,14 @@ import { Mail, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import TextInput from './TextInput';
 import PasswordInput from './PasswordInput';
 import PrimaryButton from './PrimaryButton';
+import { useSentinel } from '../../context/SentinelContext';
 
 /**
- * LoginForm component for SentinelPlan disaster response officers.
+ * LoginForm component for SentinelPlan Nagpur disaster response officers.
  * Includes inline validation, show/hide password, SSO, and demo auto-fill.
  */
 export default function LoginForm({ onSwitchToSignup, onSuccess }) {
+  const { login } = useSentinel();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
@@ -45,16 +47,26 @@ export default function LoginForm({ onSwitchToSignup, onSuccess }) {
     // Simulate authentication API request
     setTimeout(() => {
       setLoading(false);
-      setSuccessMsg('Authentication successful! Directing to Command Center...');
-      if (onSuccess) {
-        setTimeout(() => onSuccess({ email, role: 'District Officer' }), 1200);
-      }
-    }, 1500);
+      setSuccessMsg('Authentication successful! Directing to Nagpur Command Center...');
+      const userData = {
+        name: 'Commander Rajesh Sharma',
+        email: email || 'officer.nagpur@sentinelplan.gov.in',
+        role: 'Nagpur Disaster Response Officer',
+        org: 'Nagpur Municipal Corporation (NMC)',
+      };
+      setTimeout(() => {
+        if (onSuccess) {
+          onSuccess(userData);
+        } else {
+          login(userData);
+        }
+      }, 1000);
+    }, 1200);
   };
 
   const handleDemoFill = () => {
-    setEmail('officer.guwahati@sentinelplan.gov');
-    setPassword('Sentinel2026#Command');
+    setEmail('officer.nagpur@sentinelplan.gov.in');
+    setPassword('Nagpur2026#Command');
     setErrors({});
   };
 
@@ -62,7 +74,7 @@ export default function LoginForm({ onSwitchToSignup, onSuccess }) {
     <div className="bg-white rounded-2xl shadow-xl shadow-slate-900/5 border border-slate-200/90 p-6 sm:p-8 backdrop-blur-xs relative overflow-hidden">
       
       {/* Top Card Accent Bar */}
-      <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-600 via-cyan-500 to-blue-700" />
+      <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-cyan-500 via-blue-600 to-cyan-600" />
 
       {/* Headline & Subtext */}
       <div className="text-center mb-6">
@@ -70,21 +82,21 @@ export default function LoginForm({ onSwitchToSignup, onSuccess }) {
           Welcome back
         </h2>
         <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
-          Sign in to your Disaster Command Center
+          Sign in to Nagpur Flood Command Center
         </p>
       </div>
 
       {/* Demo Credentials Quick-Fill Banner */}
-      <div className="mb-5 p-2.5 bg-blue-50/70 border border-blue-200/80 rounded-xl flex items-center justify-between">
-        <div className="flex items-center space-x-2 text-xs text-blue-800">
-          <ShieldCheck className="w-4 h-4 text-blue-600 flex-shrink-0" />
-          <span className="font-medium hidden sm:inline">Testing mode? Quick fill demo responder credentials</span>
+      <div className="mb-5 p-2.5 bg-cyan-50/70 border border-cyan-200/80 rounded-xl flex items-center justify-between">
+        <div className="flex items-center space-x-2 text-xs text-cyan-900">
+          <ShieldCheck className="w-4 h-4 text-cyan-600 flex-shrink-0" />
+          <span className="font-medium hidden sm:inline">Demo officer account (Nagpur NMC Command)</span>
           <span className="font-medium sm:hidden">Fill demo officer account</span>
         </div>
         <button
           type="button"
           onClick={handleDemoFill}
-          className="text-xs font-bold text-blue-600 hover:text-blue-800 underline underline-offset-2 cursor-pointer flex-shrink-0 ml-2"
+          className="text-xs font-bold text-cyan-700 hover:text-cyan-900 underline underline-offset-2 cursor-pointer flex-shrink-0 ml-2"
         >
           Auto-fill
         </button>
@@ -107,7 +119,7 @@ export default function LoginForm({ onSwitchToSignup, onSuccess }) {
           name="username"
           type="email"
           label="Official Email / Username"
-          placeholder="officer@disaster-dept.gov"
+          placeholder="officer.nagpur@sentinelplan.gov.in"
           value={email}
           onChange={(e) => {
             setEmail(e.target.value);
@@ -120,7 +132,7 @@ export default function LoginForm({ onSwitchToSignup, onSuccess }) {
           inputMode="email"
         />
 
-        {/* Password field with show/hide toggle icon */}
+        {/* Password field */}
         <PasswordInput
           id="login-password"
           name="password"
@@ -138,9 +150,9 @@ export default function LoginForm({ onSwitchToSignup, onSuccess }) {
               href="#forgot-password"
               onClick={(e) => {
                 e.preventDefault();
-                alert('Password reset link sent to your registered official email address.');
+                alert('Password reset link dispatched to your registered Nagpur NMC official address.');
               }}
-              className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
+              className="text-xs font-semibold text-cyan-600 hover:text-cyan-800 transition-colors cursor-pointer"
             >
               Forgot password?
             </a>
@@ -155,7 +167,7 @@ export default function LoginForm({ onSwitchToSignup, onSuccess }) {
               type="checkbox"
               checked={rememberMe}
               onChange={(e) => setRememberMe(e.target.checked)}
-              className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+              className="w-4 h-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500 cursor-pointer"
             />
             <span className="text-xs font-medium text-slate-600 group-hover:text-slate-800">
               Remember me on this workstation
@@ -171,7 +183,7 @@ export default function LoginForm({ onSwitchToSignup, onSuccess }) {
             icon={ArrowRight}
             className="w-full"
           >
-            Sign In to Command Center
+            Sign In to Nagpur Command Center
           </PrimaryButton>
         </div>
 
@@ -189,12 +201,11 @@ export default function LoginForm({ onSwitchToSignup, onSuccess }) {
         </div>
       </div>
 
-      {/* Institutional SSO Buttons (Google Workspace & Microsoft Entra ID) */}
+      {/* Institutional SSO Buttons */}
       <div className="grid grid-cols-2 gap-3">
-        {/* Google Workspace */}
         <button
           type="button"
-          onClick={() => alert('Redirecting to Google Workspace Government Portal...')}
+          onClick={() => alert('Redirecting to Government Workspace Portal...')}
           className="flex items-center justify-center space-x-2 py-2.5 px-3 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 shadow-xs transition-colors cursor-pointer"
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24">
@@ -203,13 +214,12 @@ export default function LoginForm({ onSwitchToSignup, onSuccess }) {
             <path fill="#FBBC05" d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.3s.2-1.6.4-2.3L1.9 7.3C.7 9.7 0 12.4 0 15.2s.7 5.5 1.9 7.9l3.7-2.9c-.6-1.6-1-3.5-1-5.4z"/>
             <path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.3-6.4-5.2L1.9 16.1C3.7 19.8 7.5 23 12 23z"/>
           </svg>
-          <span>Google Workspace</span>
+          <span>Google Work</span>
         </button>
 
-        {/* Microsoft Entra ID */}
         <button
           type="button"
-          onClick={() => alert('Redirecting to Microsoft Entra ID (Gov Cloud)...')}
+          onClick={() => alert('Redirecting to Gov Cloud ID...')}
           className="flex items-center justify-center space-x-2 py-2.5 px-3 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 shadow-xs transition-colors cursor-pointer"
         >
           <svg className="w-4 h-4" viewBox="0 0 23 23">
@@ -225,11 +235,11 @@ export default function LoginForm({ onSwitchToSignup, onSuccess }) {
       {/* Footer link to Signup */}
       <div className="mt-6 pt-4 border-t border-slate-100 text-center">
         <p className="text-xs text-slate-600">
-          Don't have an account?{' '}
+          Don't have an officer account?{' '}
           <button
             type="button"
             onClick={onSwitchToSignup}
-            className="font-bold text-blue-600 hover:text-blue-800 underline underline-offset-2 transition-colors cursor-pointer"
+            className="font-bold text-cyan-600 hover:text-cyan-800 underline underline-offset-2 transition-colors cursor-pointer"
           >
             Sign up for access
           </button>

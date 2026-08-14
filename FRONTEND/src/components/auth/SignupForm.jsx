@@ -3,10 +3,8 @@ import { User, Building2, Mail, ShieldCheck, UserCheck, CheckCircle2, AlertCircl
 import TextInput from './TextInput';
 import PasswordInput from './PasswordInput';
 import PrimaryButton from './PrimaryButton';
+import { useSentinel } from '../../context/SentinelContext';
 
-/**
- * Helper to compute password strength score (0 to 4)
- */
 function getPasswordStrength(pwd) {
   if (!pwd) return { score: 0, label: '', color: 'bg-slate-200' };
   let score = 0;
@@ -21,13 +19,14 @@ function getPasswordStrength(pwd) {
 }
 
 /**
- * SignupForm component for registering new disaster response personnel.
+ * SignupForm component for registering new disaster response personnel for Nagpur.
  */
 export default function SignupForm({ onSwitchToLogin, onSuccess }) {
+  const { login } = useSentinel();
   const [formData, setFormData] = useState({
     fullName: '',
-    orgName: '',
-    role: 'District Disaster Officer',
+    orgName: 'Nagpur Municipal Corporation (NMC)',
+    role: 'Nagpur Disaster Officer',
     email: '',
     password: '',
     confirmPassword: '',
@@ -38,7 +37,6 @@ export default function SignupForm({ onSwitchToLogin, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
 
-  // Password strength calculation
   const strength = useMemo(() => getPasswordStrength(formData.password), [formData.password]);
 
   const handleChange = (field, value) => {
@@ -48,7 +46,6 @@ export default function SignupForm({ onSwitchToLogin, onSuccess }) {
     }
   };
 
-  // Validate form fields
   const validateForm = () => {
     const newErrors = {};
 
@@ -77,7 +74,7 @@ export default function SignupForm({ onSwitchToLogin, onSuccess }) {
     }
 
     if (!formData.agreeTerms) {
-      newErrors.agreeTerms = 'You must accept the Terms of Service and Data Usage Policy';
+      newErrors.agreeTerms = 'You must accept the Terms of Service and Data Policy';
     }
 
     setErrors(newErrors);
@@ -91,29 +88,38 @@ export default function SignupForm({ onSwitchToLogin, onSuccess }) {
 
     setLoading(true);
 
-    // Simulate registration API call
     setTimeout(() => {
       setLoading(false);
-      setSuccessMsg('Account created successfully! Submitted for District Admin verification.');
-      if (onSuccess) {
-        setTimeout(() => onSuccess(formData), 1500);
-      }
-    }, 1600);
+      setSuccessMsg('Account created successfully! Logging into Nagpur Command Center...');
+      const userObj = {
+        name: formData.fullName,
+        email: formData.email,
+        role: formData.role,
+        org: formData.orgName,
+      };
+      setTimeout(() => {
+        if (onSuccess) {
+          onSuccess(userObj);
+        } else {
+          login(userObj);
+        }
+      }, 1000);
+    }, 1400);
   };
 
   return (
     <div className="bg-white rounded-2xl shadow-xl shadow-slate-900/5 border border-slate-200/90 p-6 sm:p-8 backdrop-blur-xs relative overflow-hidden">
       
       {/* Top Card Accent Bar */}
-      <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-600 via-cyan-500 to-blue-700" />
+      <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-cyan-500 via-blue-600 to-cyan-600" />
 
       {/* Headline & Subtext */}
       <div className="text-center mb-6">
         <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-          Create your account
+          Create officer account
         </h2>
         <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
-          Get access to the real-time disaster command console
+          Access the real-time Nagpur Flood Command console
         </p>
       </div>
 
@@ -133,7 +139,7 @@ export default function SignupForm({ onSwitchToLogin, onSuccess }) {
           id="signup-fullname"
           name="name"
           label="Full Name"
-          placeholder="e.g. Commander Rajesh Kumar"
+          placeholder="e.g. Inspector Rajesh Sharma"
           value={formData.fullName}
           onChange={(e) => handleChange('fullName', e.target.value)}
           error={errors.fullName}
@@ -146,8 +152,8 @@ export default function SignupForm({ onSwitchToLogin, onSuccess }) {
         <TextInput
           id="signup-org"
           name="organization"
-          label="Organization / Agency Name"
-          placeholder="e.g. Assam State Disaster Management Authority (ASDMA)"
+          label="Organization / Department"
+          placeholder="e.g. Nagpur Municipal Corporation (NMC)"
           value={formData.orgName}
           onChange={(e) => handleChange('orgName', e.target.value)}
           error={errors.orgName}
@@ -170,12 +176,13 @@ export default function SignupForm({ onSwitchToLogin, onSuccess }) {
               name="role"
               value={formData.role}
               onChange={(e) => handleChange('role', e.target.value)}
-              className="block w-full text-sm rounded-lg border border-slate-300 bg-white text-slate-900 py-2.5 pl-9 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600 hover:border-slate-400 transition-colors"
+              className="block w-full text-sm rounded-lg border border-slate-300 bg-white text-slate-900 py-2.5 pl-9 pr-8 focus:outline-none focus:ring-2 focus:ring-cyan-600 focus:border-cyan-600 hover:border-slate-400 transition-colors"
             >
-              <option value="District Disaster Officer">District Disaster Officer</option>
-              <option value="NGO Responder">NGO Responder (SDRF / Red Cross)</option>
-              <option value="Municipal Admin">Municipal Admin</option>
-              <option value="Observer">Observer / Field Analyst</option>
+              <option value="Nagpur Disaster Officer">Nagpur Disaster Response Officer</option>
+              <option value="NMC Control Commander">NMC Control Room Commander</option>
+              <option value="Maharashtra SDRF Officer">Maharashtra SDRF Officer</option>
+              <option value="Civil Defense Nagpur">Civil Defense Nagpur</option>
+              <option value="Field Observer">Field Evacuation Analyst</option>
             </select>
           </div>
         </div>
@@ -186,7 +193,7 @@ export default function SignupForm({ onSwitchToLogin, onSuccess }) {
           name="email"
           type="email"
           label="Official Work Email"
-          placeholder="officer.name@disaster-dept.gov.in"
+          placeholder="officer.name@sentinelplan.gov.in"
           value={formData.email}
           onChange={(e) => handleChange('email', e.target.value)}
           error={errors.email}
@@ -209,7 +216,7 @@ export default function SignupForm({ onSwitchToLogin, onSuccess }) {
           autoComplete="new-password"
         />
 
-        {/* Password Strength Meter Bar */}
+        {/* Strength Meter */}
         {formData.password && (
           <div className="space-y-1 pt-1 animate-fadeIn">
             <div className="flex items-center justify-between text-[11px] font-semibold">
@@ -246,22 +253,22 @@ export default function SignupForm({ onSwitchToLogin, onSuccess }) {
               type="checkbox"
               checked={formData.agreeTerms}
               onChange={(e) => handleChange('agreeTerms', e.target.checked)}
-              className="mt-0.5 w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer flex-shrink-0"
+              className="mt-0.5 w-4 h-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500 cursor-pointer flex-shrink-0"
             />
             <span className="text-xs text-slate-600 leading-tight">
               I agree to the{' '}
               <a
                 href="#terms"
-                onClick={(e) => { e.preventDefault(); alert('Terms of Service: Authorized disaster response personnel only.'); }}
-                className="font-semibold text-blue-600 hover:text-blue-800 underline underline-offset-2"
+                onClick={(e) => { e.preventDefault(); alert('Terms: Authorized Nagpur Municipal Corporation & emergency personnel only.'); }}
+                className="font-semibold text-cyan-600 hover:text-cyan-800 underline underline-offset-2"
               >
                 Terms of Service
               </a>{' '}
               and{' '}
               <a
                 href="#privacy"
-                onClick={(e) => { e.preventDefault(); alert('Data Usage Policy: All telemetry and flood zone spatial data is classified.'); }}
-                className="font-semibold text-blue-600 hover:text-blue-800 underline underline-offset-2"
+                onClick={(e) => { e.preventDefault(); alert('Data Policy: Nagpur flood telemetry and house exposure datasets are restricted.'); }}
+                className="font-semibold text-cyan-600 hover:text-cyan-800 underline underline-offset-2"
               >
                 Data Usage Policy
               </a>
@@ -283,17 +290,17 @@ export default function SignupForm({ onSwitchToLogin, onSuccess }) {
             loading={loading}
             className="w-full"
           >
-            Create Account
+            Create Officer Account
           </PrimaryButton>
         </div>
 
       </form>
 
-      {/* Trust & Verification Note (Government / Emergency Response) */}
+      {/* Trust & Verification Note */}
       <div className="mt-5 p-3 bg-slate-50 border border-slate-200/80 rounded-xl flex items-start space-x-2.5">
-        <ShieldCheck className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+        <ShieldCheck className="w-4 h-4 text-cyan-600 flex-shrink-0 mt-0.5" />
         <p className="text-xs text-slate-500 leading-snug">
-          <strong className="font-semibold text-slate-700">Responder Verification:</strong> Accounts for official responders are verified by District Command before live dashboard access is granted.
+          <strong className="font-semibold text-slate-700">Responder Verification:</strong> Accounts are verified by Nagpur Municipal Corporation Control Room before live dashboard activation.
         </p>
       </div>
 
@@ -304,7 +311,7 @@ export default function SignupForm({ onSwitchToLogin, onSuccess }) {
           <button
             type="button"
             onClick={onSwitchToLogin}
-            className="font-bold text-blue-600 hover:text-blue-800 underline underline-offset-2 transition-colors cursor-pointer"
+            className="font-bold text-cyan-600 hover:text-cyan-800 underline underline-offset-2 transition-colors cursor-pointer"
           >
             Sign in
           </button>
