@@ -1,17 +1,12 @@
-/**
- * FullMapView.jsx — SentinelPlan Interactive Map View
- * ─────────────────────────────────────────────────────────────────────────────
- * Guaranteed zero-blank screen map component.
- * Features 2D Tactical View (Leaflet) by default for 100% instant browser compatibility,
- * with optional 3D Photorealistic Satellite View (MapLibre GL JS) toggle.
- */
 import React, { useEffect, useRef, useState } from 'react';
-import { MapContainer, TileLayer, Polygon, Polyline, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Polygon, Polyline, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
+import * as maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
 
 import { useSentinel } from '../context/SentinelContext';
 import PriorityActionFeed from './PriorityActionFeed';
-import { DENSITY_HEATMAP_POINTS } from '../data/mockData';
+import { DENSITY_HEATMAP_POINTS, NAGPUR_RIVERS } from '../data/mockData';
 import {
   AlertTriangle,
   PanelRightClose,
@@ -21,6 +16,13 @@ import {
   ShieldAlert,
   Box,
   Layers,
+  MapPin,
+  Compass,
+  RotateCcw,
+  Eye,
+  Sliders,
+  Check,
+  Maximize2
 } from 'lucide-react';
 
 // ─── GeoJSON Helpers ──────────────────────────────────────────────────────────
@@ -41,6 +43,7 @@ function zonesToGeoJSON(zones) {
         rationale: zone.rationale,
         roadsOpen: zone.roadsOpen,
         totalRoads: zone.totalRoads,
+        height: 25 + Math.min((zone.priority || 50) * 0.8, 80), // 3D height extrusion
       },
       geometry: {
         type: 'Polygon',
@@ -76,19 +79,20 @@ function roadsToGeoJSON(roads) {
   };
 }
 
-function heatmapToGeoJSON(points) {
+function riversToGeoJSON(rivers) {
   return {
     type: 'FeatureCollection',
-    features: (points || []).map((pt, i) => ({
+    features: (rivers || []).map(river => ({
       type: 'Feature',
-      id: i,
+      id: river.id,
       properties: {
-        intensity: pt.intensity,
-        label: pt.label,
+        id: river.id,
+        name: river.name,
+        color: river.color,
       },
       geometry: {
-        type: 'Point',
-        coordinates: [pt.lng, pt.lat],
+        type: 'LineString',
+        coordinates: river.coordinates,
       },
     })),
   };
@@ -96,36 +100,45 @@ function heatmapToGeoJSON(points) {
 
 // ─── MapLibre Style Definition ────────────────────────────────────────────────
 
-function buildMapStyle() {
+function buildMapStyle(styleType) {
+  let rasterTiles = ['https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'];
+  let attribution = '© CartoDB Voyager, OpenStreetMap';
+
+  if (styleType === 'satellite') {
+    rasterTiles = ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'];
+    attribution = '© Esri World Imagery';
+  } else if (styleType === 'dark') {
+    rasterTiles = ['https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'];
+    attribution = '© CartoDB Dark';
+  } else if (styleType === 'light') {
+    rasterTiles = ['https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'];
+    attribution = '© CartoDB Positron';
+  }
+
   return {
     version: 8,
-    name: 'SentinelPlan Satellite 3D',
+    name: 'Nagpur Flood Safe 3D',
     sources: {
-      satellite: {
+      'base-tiles': {
         type: 'raster',
-        tiles: [
-          'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        ],
+        tiles: rasterTiles,
         tileSize: 256,
-        attribution: '© ESRI World Imagery',
+        attribution,
         maxzoom: 19,
       },
       terrain: {
         type: 'raster-dem',
-        tiles: [
-          'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
-        ],
+        tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
         tileSize: 256,
         encoding: 'terrarium',
         maxzoom: 14,
-        attribution: '© Mapzen Terrarium',
       },
     },
     layers: [
       {
-        id: 'satellite-layer',
+        id: 'base-raster',
         type: 'raster',
-        source: 'satellite',
+        source: 'base-tiles',
         minzoom: 0,
         maxzoom: 22,
       },
@@ -133,49 +146,19 @@ function buildMapStyle() {
   };
 }
 
-// ─── Leaflet Helper Component for 2D Map Auto-fitting ─────────────────────────
-
-function LeafletMapViewUpdater({ center, zoom, zones }) {
+// Leaflet Map Auto-Updater
+function LeafletMapAutoUpdater({ center, zoom }) {
   const map = useMap();
+  useEffect(() => {
+    if (center) map.setView(center, zoom);
+  }, [map, center, zoom]);
 
   useEffect(() => {
-    if (center) {
-      map.setView(center, zoom || 12);
-    }
-
-    if (zones && zones.length > 0) {
-      let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
-      let valid = false;
-      zones.forEach(z => {
-        if (Array.isArray(z.geometry)) {
-          z.geometry.forEach(([lat, lng]) => {
-            if (typeof lat === 'number' && typeof lng === 'number') {
-              valid = true;
-              if (lat < minLat) minLat = lat;
-              if (lat > maxLat) maxLat = lat;
-              if (lng < minLng) minLng = lng;
-              if (lng > maxLng) maxLng = lng;
-            }
-          });
-        }
-      });
-      if (valid && minLat < maxLat && minLng < maxLng) {
-        map.fitBounds([[minLat, minLng], [maxLat, maxLng]], { padding: [40, 40] });
-      }
-    }
-  }, [map, center, zoom, zones]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      map.invalidateSize();
-    }, 100);
-    return () => clearTimeout(timer);
+    const t = setTimeout(() => map.invalidateSize(), 150);
+    return () => clearTimeout(t);
   }, [map]);
-
   return null;
 }
-
-// ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function FullMapView() {
   const {
@@ -186,80 +169,88 @@ export default function FullMapView() {
     setSelectedZoneId,
     toggleRoadStatus,
     simulateRoadBlock,
+    alerts,
+    sendSosAlert,
   } = useSentinel();
+
+  // Map Mode & Layers State
+  const [mapMode, setMapMode] = useState('2d'); // '2d' | '3d'
+  const [baseStyle, setBaseStyle] = useState('google-streets'); // 'google-streets' | 'satellite' | 'dark' | 'light'
+  const [showZones, setShowZones] = useState(true);
+  const [showRoads, setShowRoads] = useState(true);
+  const [showRivers, setShowRivers] = useState(true);
+  const [showHeatmap, setShowHeatmap] = useState(true);
+  
+  // 3D Specific State
+  const [pitch, setPitch] = useState(55);
+  const [bearing, setBearing] = useState(-15);
+
+  const [sidebarTab, setSidebarTab] = useState('feed');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  const criticalZoneCount = zones.filter(z => z.severity === 'red').length;
+  const nagpurCenter = currentRegionMeta?.center || [21.1458, 79.0882];
 
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
-  const mapReadyRef = useRef(false);
-  const popupRef = useRef(null);
 
-  // Map Mode: '2d' by default for guaranteed 100% instant rendering
-  const [mapMode, setMapMode] = useState('2d');
+  // 2D Tile Layer URL generator (Google Maps style default)
+  const get2DTileUrl = () => {
+    switch (baseStyle) {
+      case 'satellite':
+        return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+      case 'dark':
+        return 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+      case 'light':
+        return 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+      case 'google-streets':
+      default:
+        return 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+    }
+  };
 
-  // Sidebar state
-  const [sidebarTab, setSidebarTab] = useState('feed');
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [hoveredFeature, setHoveredFeature] = useState(null);
-
-  const criticalZoneCount = zones.filter(z => z.severity === 'red').length;
-  const center = currentRegionMeta?.center || [21.1458, 79.0882];
-  const regionId = currentRegionMeta?.id || 'nagpur';
-
-  // ── Initialize MapLibre 3D Map (when 3D mode is toggled) ───────────────────
+  // Initialize MapLibre 3D Map (when 3D mode is toggled)
   useEffect(() => {
     if (mapMode !== '3d') return;
     if (!mapContainerRef.current) return;
 
-    const maplib = getMaplib();
-    if (!maplib) {
-      setMapMode('2d');
-      return;
-    }
-
     try {
-      if (typeof maplib.supported === 'function' && !maplib.supported()) {
-        setMapMode('2d');
-        return;
-      }
-
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
-        mapReadyRef.current = false;
       }
 
-      const lngLat = [center[1], center[0]];
-
-      const map = new maplib.Map({
+      const map = new maplibregl.Map({
         container: mapContainerRef.current,
-        style: buildMapStyle(),
-        center: lngLat,
-        zoom: currentRegionMeta?.zoom ? currentRegionMeta.zoom - 0.5 : 11.5,
-        pitch: 50,
-        bearing: -15,
-        minZoom: 4,
-        maxZoom: 20,
+        style: buildMapStyle(baseStyle),
+        center: [nagpurCenter[1], nagpurCenter[0]],
+        zoom: 12.4,
+        pitch: pitch,
+        bearing: bearing,
         antialias: true,
       });
 
       mapRef.current = map;
 
-      map.addControl(new maplib.NavigationControl({ visualizePitch: true }), 'top-right');
-      map.addControl(new maplib.ScaleControl({ unit: 'metric' }), 'bottom-right');
-      map.addControl(new maplib.FullscreenControl(), 'top-right');
+      map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
+      map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
 
       map.on('load', () => {
         try {
-          map.setTerrain({ source: 'terrain', exaggeration: 2.0 });
+          map.setTerrain({ source: 'terrain', exaggeration: 2.2 });
 
+          // 1. Add Zone Hazard Polygons
           map.addSource('zones', { type: 'geojson', data: zonesToGeoJSON(zones) });
           map.addLayer({
-            id: 'zones-fill',
-            type: 'fill',
+            id: 'zones-extrusion',
+            type: 'fill-extrusion',
             source: 'zones',
+            layout: { visibility: showZones ? 'visible' : 'none' },
             paint: {
-              'fill-color': ['get', 'severityColor'],
-              'fill-opacity': ['case', ['==', ['get', 'severity'], 'red'], 0.35, ['==', ['get', 'severity'], 'amber'], 0.25, 0.18],
+              'fill-extrusion-color': ['get', 'severityColor'],
+              'fill-extrusion-height': ['get', 'height'],
+              'fill-extrusion-base': 0,
+              'fill-extrusion-opacity': 0.7,
             },
           });
 
@@ -267,64 +258,70 @@ export default function FullMapView() {
             id: 'zones-outline',
             type: 'line',
             source: 'zones',
-            paint: { 'line-color': ['get', 'severityColor'], 'line-width': 2.5, 'line-opacity': 0.9 },
+            layout: { visibility: showZones ? 'visible' : 'none' },
+            paint: {
+              'line-color': ['get', 'severityColor'],
+              'line-width': 3,
+            },
           });
 
+          // 2. Add Nagpur Rivers Layer
+          map.addSource('rivers', { type: 'geojson', data: riversToGeoJSON(NAGPUR_RIVERS) });
           map.addLayer({
-            id: 'zones-selected',
+            id: 'rivers-line',
             type: 'line',
-            source: 'zones',
-            filter: ['==', ['get', 'id'], ''],
-            paint: { 'line-color': '#38bdf8', 'line-width': 4, 'line-opacity': 1, 'line-dasharray': [2, 2] },
+            source: 'rivers',
+            layout: { visibility: showRivers ? 'visible' : 'none' },
+            paint: {
+              'line-color': ['get', 'color'],
+              'line-width': 5,
+            },
           });
 
-          map.addSource('heatmap', { type: 'geojson', data: heatmapToGeoJSON(DENSITY_HEATMAP_POINTS) });
-          map.addLayer({
-            id: 'heatmap-outer',
-            type: 'circle',
-            source: 'heatmap',
-            paint: { 'circle-radius': ['*', 50, ['get', 'intensity']], 'circle-color': '#ef4444', 'circle-opacity': ['*', 0.12, ['get', 'intensity']], 'circle-blur': 1 },
-          });
-
+          // 3. Add Nagpur Roads Layer
           map.addSource('roads', { type: 'geojson', data: roadsToGeoJSON(roads) });
-          map.addLayer({
-            id: 'roads-hit',
-            type: 'line',
-            source: 'roads',
-            paint: { 'line-color': '#ffffff', 'line-width': 20, 'line-opacity': 0.001 },
-          });
-
           map.addLayer({
             id: 'roads-line',
             type: 'line',
             source: 'roads',
+            layout: { visibility: showRoads ? 'visible' : 'none' },
             paint: {
-              'line-color': ['case', ['==', ['get', 'status'], 'blocked'], '#ef4444', '#38bdf8'],
-              'line-width': 4,
-              'line-opacity': 0.9,
-              'line-dasharray': ['case', ['==', ['get', 'status'], 'blocked'], ['literal', [6, 8]], ['literal', [1, 0]]],
+              'line-color': ['case', ['get', 'isBlocked'], '#ef4444', '#10b981'],
+              'line-width': ['case', ['get', 'isBlocked'], 5, 3.5],
+              'line-dasharray': ['case', ['get', 'isBlocked'], [2, 1], [1, 0]],
             },
           });
 
-          map.on('click', 'roads-hit', (e) => {
-            if (!e.features || e.features.length === 0) return;
-            const feature = e.features[0];
-            toggleRoadStatus(feature.properties.id);
+          // 3D Click Popup
+          map.on('click', 'zones-extrusion', (e) => {
+            if (e.features && e.features[0]) {
+              const props = e.features[0].properties;
+              setSelectedZoneId(props.id);
+
+              new maplibregl.Popup()
+                .setLngLat(e.lngLat)
+                .setHTML(`
+                  <div style="font-family: sans-serif; padding: 4px;">
+                    <strong style="color: #0f172a; font-size: 13px;">${props.name}</strong><br/>
+                    <span style="font-size: 11px; color: ${props.severityColor}; font-weight: bold;">
+                      Priority Score: ${props.priority} (${props.severity?.toUpperCase()})
+                    </span><br/>
+                    <span style="font-size: 11px; color: #64748b;">
+                      Exposed Population: ${Number(props.peopleExposed).toLocaleString()} residents
+                    </span>
+                  </div>
+                `)
+                .addTo(map);
+            }
           });
 
-          map.on('click', 'zones-fill', (e) => {
-            if (!e.features || e.features.length === 0) return;
-            setSelectedZoneId(e.features[0].properties.id);
-          });
-
-          mapReadyRef.current = true;
-          requestAnimationFrame(() => map.resize());
-        } catch (err) {
-          console.error('Error adding 3D map layers:', err);
+        } catch (e) {
+          console.warn('[FullMapView] 3D load warning:', e);
         }
       });
+
     } catch (err) {
-      console.error('MapLibre init error:', err);
+      console.error('[FullMapView] MapLibre 3D error:', err);
       setMapMode('2d');
     }
 
@@ -332,395 +329,275 @@ export default function FullMapView() {
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
-        mapReadyRef.current = false;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapMode, regionId]);
-
-  const handleTabClick = (tab) => {
-    if (sidebarTab === tab && sidebarOpen) {
-      setSidebarOpen(false);
-    } else {
-      setSidebarTab(tab);
-      setSidebarOpen(true);
-    }
-  };
+  }, [mapMode, baseStyle, showZones, showRoads, showRivers]);
 
   return (
-    <div
-      style={{ height: 'calc(100vh - 64px)', minHeight: 'calc(100vh - 64px)' }}
-      className="h-[calc(100vh-64px)] w-full flex flex-col relative overflow-hidden bg-[#f1f5f9]"
-    >
-      {/* Top Control Bar */}
-      <div className="bg-white border-b border-slate-200 px-4 py-2.5 flex items-center justify-between z-10 shadow-sm flex-shrink-0">
-        <div className="flex items-center space-x-3">
-          <div className="flex items-center space-x-2 bg-slate-50 px-3 py-1 rounded-lg border border-slate-200 text-xs">
-            <Info className="w-4 h-4 text-cyan-500" />
-            <span className="text-slate-600">
-              <strong className="text-slate-800">{mapMode === '3d' ? '3D Photorealistic Map' : '2D Tactical View'}:</strong> Click roads to toggle open/blocked · Click zones to view status
-            </span>
-          </div>
-
-          {/* Map Mode Switcher Toggle */}
-          <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
+    <div className="flex-1 flex flex-col md:flex-row h-full overflow-hidden bg-slate-900 text-slate-100 font-sans relative">
+      
+      {/* ─── MAIN MAP VIEW AREA ────────────────────────────────────────────── */}
+      <div className="flex-1 relative h-full w-full flex flex-col overflow-hidden">
+        
+        {/* Top Control Bar (Mode Switcher, Basemaps & Overlays Toggles) */}
+        <div className="absolute top-4 left-4 right-4 z-20 flex flex-wrap items-center justify-between gap-3 pointer-events-none">
+          
+          {/* 2D / 3D Mode Selector */}
+          <div className="pointer-events-auto flex items-center space-x-1 bg-slate-950/90 backdrop-blur-md border border-slate-800 rounded-2xl p-1.5 shadow-2xl">
             <button
               onClick={() => setMapMode('2d')}
-              className={`flex items-center space-x-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
                 mapMode === '2d'
-                  ? 'bg-cyan-500 text-white shadow-sm'
-                  : 'text-slate-500 hover:text-slate-800'
+                  ? 'bg-white text-slate-900 shadow-md font-extrabold'
+                  : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <Layers className="w-3.5 h-3.5" />
-              <span>2D Tactical</span>
+              <MapPin className="w-3.5 h-3.5 text-cyan-600" />
+              <span>2D Detailed Streets</span>
             </button>
+
             <button
               onClick={() => setMapMode('3d')}
-              className={`flex items-center space-x-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
                 mapMode === '3d'
-                  ? 'bg-cyan-500 text-white shadow-sm'
-                  : 'text-slate-500 hover:text-slate-800'
+                  ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md shadow-cyan-500/30'
+                  : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <Box className="w-3.5 h-3.5" />
-              <span>3D Satellite</span>
+              <Box className="w-3.5 h-3.5 text-cyan-300" />
+              <span>3D Photorealistic</span>
+            </button>
+          </div>
+
+          {/* Base Map Style Selector */}
+          <div className="pointer-events-auto hidden sm:flex items-center space-x-1 bg-slate-950/90 backdrop-blur-md border border-slate-800 rounded-2xl p-1.5 shadow-2xl text-xs font-medium">
+            <button
+              onClick={() => setBaseStyle('google-streets')}
+              className={`px-3 py-1.5 rounded-xl transition-all ${
+                baseStyle === 'google-streets' ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-400/40' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              🗺️ Google Streets
+            </button>
+
+            <button
+              onClick={() => setBaseStyle('satellite')}
+              className={`px-3 py-1.5 rounded-xl transition-all ${
+                baseStyle === 'satellite' ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-400/40' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              🛰️ Satellite Hybrid
+            </button>
+
+            <button
+              onClick={() => setBaseStyle('dark')}
+              className={`px-3 py-1.5 rounded-xl transition-all ${
+                baseStyle === 'dark' ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-400/40' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              🕶️ Dark Mode
+            </button>
+          </div>
+
+          {/* Layer Overlay Toggles */}
+          <div className="pointer-events-auto flex items-center space-x-1.5 bg-slate-950/90 backdrop-blur-md border border-slate-800 rounded-2xl px-3 py-1.5 shadow-2xl text-xs">
+            <button
+              onClick={() => setShowZones(!showZones)}
+              className={`flex items-center space-x-1 transition-all ${showZones ? 'text-cyan-400 font-bold' : 'text-slate-500 line-through'}`}
+            >
+              <span>Zones</span>
+            </button>
+            <span className="text-slate-700">|</span>
+            <button
+              onClick={() => setShowRoads(!showRoads)}
+              className={`flex items-center space-x-1 transition-all ${showRoads ? 'text-cyan-400 font-bold' : 'text-slate-500 line-through'}`}
+            >
+              <span>Roads</span>
+            </button>
+            <span className="text-slate-700">|</span>
+            <button
+              onClick={() => setShowRivers(!showRivers)}
+              className={`flex items-center space-x-1 transition-all ${showRivers ? 'text-cyan-400 font-bold' : 'text-slate-500 line-through'}`}
+            >
+              <span>Rivers</span>
             </button>
           </div>
         </div>
 
-        <div className="flex items-center space-x-3">
-          <button
-            id="map-simulate-btn"
-            onClick={simulateRoadBlock}
-            className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-extrabold text-xs shadow-lg shadow-amber-500/20 active:scale-95 transition-all cursor-pointer"
-          >
-            <AlertTriangle className="w-4 h-4 text-slate-950" />
-            <span>Simulate Road Block</span>
-          </button>
+        {/* 3D Map Canvas */}
+        {mapMode === '3d' && (
+          <div ref={mapContainerRef} className="w-full h-full relative" />
+        )}
 
-          <button
-            onClick={() => setSidebarOpen(prev => !prev)}
-            className="p-2 rounded-lg bg-white border border-slate-200 text-slate-500 hover:text-cyan-600 hover:border-cyan-200 transition-all cursor-pointer shadow-sm"
-            title={sidebarOpen ? 'Collapse Panel' : 'Expand Panel'}
+        {/* 2D Leaflet Google Maps Style Canvas */}
+        {mapMode === '2d' && (
+          <MapContainer
+            center={nagpurCenter}
+            zoom={12.5}
+            scrollWheelZoom={true}
+            className="w-full h-full z-0"
           >
-            {sidebarOpen ? <PanelRightClose className="w-5 h-5" /> : <PanelRightOpen className="w-5 h-5" />}
-          </button>
-        </div>
+            <LeafletMapAutoUpdater center={nagpurCenter} zoom={12.5} />
+
+            {/* Base Tile Layer */}
+            <TileLayer
+              url={get2DTileUrl()}
+              attribution="© CartoDB Voyager, OpenStreetMap contributors"
+              maxZoom={19}
+            />
+
+            {baseStyle === 'satellite' && (
+              <TileLayer
+                url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png"
+                attribution="© CartoDB Labels"
+                maxZoom={19}
+              />
+            )}
+
+            {/* Zones Overlay */}
+            {showZones &&
+              zones.map((zone) => {
+                const isSelected = selectedZoneId === zone.id;
+                return (
+                  <Polygon
+                    key={zone.id}
+                    positions={zone.geometry}
+                    pathOptions={{
+                      color: zone.severityColor || '#3b82f6',
+                      fillColor: zone.severityColor || '#3b82f6',
+                      fillOpacity: isSelected ? 0.65 : 0.4,
+                      weight: isSelected ? 4 : 2,
+                    }}
+                    eventHandlers={{
+                      click: () => setSelectedZoneId(zone.id),
+                    }}
+                  >
+                    <Popup>
+                      <div className="font-sans p-1 text-slate-800">
+                        <h3 className="font-bold text-sm text-slate-900">{zone.name}</h3>
+                        <div className="text-xs mt-1 space-y-0.5">
+                          <div className="flex items-center space-x-1 font-bold" style={{ color: zone.severityColor }}>
+                            <span>Priority Score: {zone.priority} ({zone.severity?.toUpperCase()})</span>
+                          </div>
+                          <div>Exposed Population: <strong>{zone.peopleExposed?.toLocaleString()}</strong></div>
+                          <div>Assigned Squad: <strong>{zone.assignedSquad}</strong></div>
+                          <div className="text-[11px] text-slate-500 mt-1">{zone.rationale}</div>
+                        </div>
+                      </div>
+                    </Popup>
+                  </Polygon>
+                );
+              })}
+
+            {/* Rivers Overlay */}
+            {showRivers &&
+              NAGPUR_RIVERS.map((river) => (
+                <Polyline
+                  key={river.id}
+                  positions={river.coordinates.map(([lng, lat]) => [lat, lng])}
+                  pathOptions={{
+                    color: river.color,
+                    weight: 5,
+                    opacity: 0.85,
+                  }}
+                >
+                  <Popup>
+                    <div className="font-sans text-xs">
+                      <strong>{river.name}</strong><br />
+                      Water Surge: +{river.waterSurgeMeters}m
+                    </div>
+                  </Popup>
+                </Polyline>
+              ))}
+
+            {/* Roads Overlay */}
+            {showRoads &&
+              roads.map((road) => {
+                const isBlocked = road.status === 'blocked';
+                return (
+                  <Polyline
+                    key={road.id}
+                    positions={road.geometry}
+                    pathOptions={{
+                      color: isBlocked ? '#ef4444' : '#10b981',
+                      weight: isBlocked ? 5 : 3.5,
+                      dashArray: isBlocked ? '6, 6' : null,
+                      opacity: 0.9,
+                    }}
+                    eventHandlers={{
+                      click: () => toggleRoadStatus(road.id),
+                    }}
+                  >
+                    <Popup>
+                      <div className="font-sans text-xs">
+                        <strong>{road.name}</strong><br />
+                        Type: {road.type}<br />
+                        Status: <span style={{ color: isBlocked ? '#ef4444' : '#10b981', fontWeight: 'bold' }}>
+                          {road.status?.toUpperCase()}
+                        </span><br />
+                        <button
+                          onClick={() => toggleRoadStatus(road.id)}
+                          style={{
+                            marginTop: '4px',
+                            padding: '2px 8px',
+                            background: '#0ea5e9',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '11px',
+                            fontWeight: 'bold',
+                          }}
+                        >
+                          Toggle Block Status
+                        </button>
+                      </div>
+                    </Popup>
+                  </Polyline>
+                );
+              })}
+          </MapContainer>
+        )}
       </div>
 
-      {/* ── Main Layout: Map Canvas + Right Sidebar ─────────────────────────── */}
-      <div className="flex-1 flex relative overflow-hidden h-full w-full">
-
-        {/* Map Canvas */}
-        <div style={{ height: '100%', width: '100%' }} className="flex-1 h-full relative w-full overflow-hidden">
-
-          {/* MODE 1: 2D Tactical Leaflet View (Default, 100% Instant Load) */}
-          {mapMode === '2d' && (
-            <div style={{ height: '100%', width: '100%' }} className="absolute inset-0 w-full h-full">
-              <MapContainer
-                center={center}
-                zoom={currentRegionMeta?.zoom || 12}
-                minZoom={4}
-                maxZoom={18}
-                zoomControl={true}
-                scrollWheelZoom={true}
-                className="h-full w-full bg-slate-100"
+      {/* ─── RIGHT SIDEBAR COLLAPSIBLE PANEL ──────────────────────────────── */}
+      <div
+        className={`bg-slate-950 border-l border-slate-800 transition-all duration-300 flex flex-col h-full z-10 ${
+          sidebarOpen ? 'w-full md:w-96' : 'w-12'
+        }`}
+      >
+        {/* Toggle Button */}
+        <div className="p-3 border-b border-slate-800 flex items-center justify-between bg-slate-900/60">
+          {sidebarOpen ? (
+            <div className="flex items-center justify-between w-full">
+              <span className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">
+                Nagpur Command Feed
+              </span>
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-100 rounded-lg hover:bg-slate-800 transition-colors"
               >
-                <TileLayer
-                  url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-                  subdomains="abcd"
-                  attribution="© CartoDB"
-                />
-
-                <LeafletMapViewUpdater center={center} zoom={currentRegionMeta?.zoom} zones={zones} />
-
-                {/* Draw Roads */}
-                {roads.map(road => {
-                  const isBlocked = road.status === 'blocked';
-                  return (
-                    <Polyline
-                      key={road.id}
-                      positions={road.geometry}
-                      eventHandlers={{
-                        click: () => toggleRoadStatus(road.id),
-                        mouseover: () => setHoveredFeature({ type: 'road', name: road.name, status: road.status }),
-                        mouseout: () => setHoveredFeature(null),
-                      }}
-                      pathOptions={{
-                        color: isBlocked ? '#dc2626' : '#0891b2',
-                        weight: isBlocked ? 5 : 4,
-                        dashArray: isBlocked ? '6, 8' : null,
-                        opacity: 0.9,
-                      }}
-                    />
-                  );
-                })}
-
-                {/* Draw Zones */}
-                {zones.map(zone => {
-                  const isSelected = selectedZoneId === zone.id;
-                  return (
-                    <Polygon
-                      key={zone.id}
-                      positions={zone.geometry}
-                      eventHandlers={{
-                        click: () => setSelectedZoneId(zone.id),
-                        mouseover: () => setHoveredFeature({
-                          type: 'zone',
-                          name: zone.name,
-                          priority: zone.priority,
-                          peopleExposed: zone.peopleExposed,
-                          severityColor: zone.severityColor,
-                        }),
-                        mouseout: () => setHoveredFeature(null),
-                      }}
-                      pathOptions={{
-                        color: isSelected ? '#0891b2' : zone.severityColor,
-                        fillColor: zone.severityColor,
-                        fillOpacity: zone.severity === 'red' ? 0.4 : zone.severity === 'amber' ? 0.28 : 0.18,
-                        weight: isSelected ? 4 : 2.5,
-                      }}
-                    />
-                  );
-                })}
-              </MapContainer>
+                <PanelRightClose className="w-4 h-4" />
+              </button>
             </div>
+          ) : (
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="p-1 text-slate-400 hover:text-slate-100 rounded-lg hover:bg-slate-800 transition-colors mx-auto"
+              title="Expand Side Panel"
+            >
+              <PanelRightOpen className="w-4 h-4" />
+            </button>
           )}
-
-          {/* MODE 2: 3D MapLibre Satellite View */}
-          {mapMode === '3d' && (
-            <div
-              ref={mapContainerRef}
-              style={{ height: '100%', width: '100%' }}
-              className="absolute inset-0 w-full h-full min-h-full"
-            />
-          )}
-
-          {/* Hover Tooltip Overlay */}
-          {hoveredFeature && (
-            <div className="absolute bottom-16 left-4 z-20 bg-white/95 border border-slate-200 p-3 rounded-xl backdrop-blur-md shadow-lg text-xs pointer-events-none">
-              {hoveredFeature.type === 'road' ? (
-                <div className="space-y-1">
-                  <div className="font-bold text-slate-800">{hoveredFeature.name}</div>
-                  <div className={`font-semibold ${hoveredFeature.status === 'blocked' ? 'text-rose-600' : 'text-cyan-600'}`}>
-                    {hoveredFeature.status === 'blocked' ? '⛔ BLOCKED' : '✅ OPEN'} · Click to toggle
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  <div className="font-bold text-slate-800">{hoveredFeature.name}</div>
-                  <div className="text-slate-600">
-                    Priority: <strong style={{ color: hoveredFeature.severityColor }}>{hoveredFeature.priority}</strong>
-                  </div>
-                  <div className="text-slate-500">{hoveredFeature.peopleExposed?.toLocaleString()} people exposed</div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Map Legend */}
-          <div className="absolute bottom-10 left-4 z-10 bg-white/95 border border-slate-200 p-3 rounded-xl backdrop-blur-md shadow-lg text-xs space-y-2">
-            <h4 className="font-bold text-slate-500 uppercase text-[10px] tracking-wider">Map Legend</h4>
-            <div className="space-y-1.5 text-slate-600">
-              <div className="flex items-center space-x-2">
-                <span className="w-3 h-3 rounded-full bg-rose-500 animate-pulse inline-block"></span>
-                <span>Critical Zone (Score ≥ 75)</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <span className="w-3 h-3 rounded-full bg-amber-500 inline-block"></span>
-                <span>Warning Zone (Score 50–74)</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span>
-                <span>Stable Zone (Score &lt; 50)</span>
-              </div>
-              <div className="flex items-center space-x-2 pt-1 border-t border-slate-100">
-                <span className="w-4 h-1 bg-cyan-500 rounded inline-block"></span>
-                <span>Open Evacuation Route</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <span className="w-4 h-1 bg-rose-500 rounded border border-dashed border-rose-300 inline-block"></span>
-                <span>Blocked / Submerged Route</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Map Mode Badge */}
-          <div className="absolute top-4 right-16 z-10 bg-white/95 border border-cyan-200 text-cyan-700 text-[10px] font-bold px-2.5 py-1 rounded-full backdrop-blur-sm uppercase tracking-wider shadow-sm">
-            {mapMode === '3d' ? '3D Satellite Active' : '2D Tactical Active'}
-          </div>
         </div>
 
-        {/* Collapsible Right Sidebar */}
+        {/* Sidebar Content */}
         {sidebarOpen && (
-          <div className="w-96 h-full border-l border-slate-200 bg-white flex flex-col z-10 shadow-lg flex-shrink-0">
-
-            {/* Sidebar Tab Bar */}
-            <div className="flex border-b border-slate-200 bg-slate-50 flex-shrink-0">
-              <button
-                onClick={() => handleTabClick('feed')}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[11px] font-bold uppercase tracking-wide transition-all cursor-pointer ${
-                  sidebarTab === 'feed'
-                    ? 'text-cyan-600 border-b-2 border-cyan-500 bg-white'
-                    : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'
-                }`}
-              >
-                <ShieldAlert className="w-3.5 h-3.5" />
-                <span>Priority Feed</span>
-              </button>
-
-              <button
-                onClick={() => handleTabClick('sos')}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[11px] font-bold uppercase tracking-wide transition-all cursor-pointer relative ${
-                  sidebarTab === 'sos'
-                    ? 'text-rose-600 border-b-2 border-rose-500 bg-white'
-                    : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'
-                }`}
-              >
-                <Siren className="w-3.5 h-3.5" />
-                <span>SOS Alerts</span>
-                {criticalZoneCount > 0 && (
-                  <span className="absolute top-1.5 right-6 w-4 h-4 flex items-center justify-center rounded-full bg-rose-500 text-white text-[9px] font-black animate-pulse">
-                    {criticalZoneCount}
-                  </span>
-                )}
-              </button>
-            </div>
-
-            {/* Sidebar Content */}
-            <div className="flex-1 overflow-y-auto p-3 bg-[#f1f5f9]">
-              {sidebarTab === 'feed' ? (
-                <PriorityActionFeed />
-              ) : (
-                <SidebarSosPanel />
-              )}
-            </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+            <PriorityActionFeed />
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-// ─── Sidebar-Compact SOS Panel ────────────────────────────────────────────────
-
-function SidebarSosPanel() {
-  const {
-    zones,
-    sosAlerts,
-    sendSosAlert,
-    sendMassSos,
-    sosNotification,
-    dismissSosNotification,
-  } = useSentinel();
-
-  const [massSending, setMassSending] = useState(false);
-  const affectedZones = zones.filter(z => z.severity === 'red' || z.severity === 'amber');
-  const criticalZones = zones.filter(z => z.severity === 'red');
-
-  const handleMassSos = () => {
-    setMassSending(true);
-    sendMassSos(zones);
-    setTimeout(() => setMassSending(false), 2000);
-  };
-
-  return (
-    <div className="space-y-3">
-      {sosNotification && (
-        <div className="flex items-center gap-2 p-3 rounded-xl border border-rose-200 bg-rose-50 text-xs">
-          <Siren className="w-4 h-4 text-rose-600 animate-pulse flex-shrink-0" />
-          <div className="flex-1 min-w-0">
-            <div className="font-bold text-rose-700">Alert Sent!</div>
-            <div className="text-rose-500 truncate">{sosNotification.zoneName}</div>
-          </div>
-          <button onClick={dismissSosNotification} className="text-rose-400 hover:text-rose-700 cursor-pointer transition-colors">
-            ✕
-          </button>
-        </div>
-      )}
-
-      <button
-        id="sidebar-mass-sos-btn"
-        onClick={handleMassSos}
-        disabled={massSending || criticalZones.length === 0}
-        className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95 border ${
-          massSending
-            ? 'bg-emerald-50 border-emerald-200 text-emerald-700 cursor-not-allowed'
-            : criticalZones.length === 0
-              ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
-              : 'bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white border-rose-400/50 shadow-md shadow-rose-200 cursor-pointer'
-        }`}
-      >
-        <Siren className="w-3.5 h-3.5" />
-        {massSending ? 'Mass SOS Dispatched!' : `Send Mass SOS (${criticalZones.length} Critical Zones)`}
-      </button>
-
-      <div className="space-y-2">
-        <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-1">
-          Affected Zones ({affectedZones.length})
-        </h3>
-        {affectedZones.map(zone => {
-          const isCritical = zone.severity === 'red';
-          return (
-            <div
-              key={zone.id}
-              className={`rounded-xl border p-3 text-xs bg-white ${
-                isCritical
-                  ? 'border-rose-200'
-                  : 'border-amber-200'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isCritical ? 'bg-rose-500 animate-pulse' : 'bg-amber-500'}`} />
-                  <span className="font-bold text-slate-800 text-[11px] truncate">{zone.name}</span>
-                </div>
-                <span className="text-[10px] font-bold flex-shrink-0" style={{ color: zone.severityColor }}>
-                  P{zone.priority}
-                </span>
-              </div>
-              <div className="text-slate-500 mb-2">
-                {zone.peopleExposed.toLocaleString()} exposed · {zone.roadsOpen}/{zone.totalRoads} routes open
-              </div>
-              <button
-                id={`sidebar-sos-${zone.id}`}
-                onClick={() => sendSosAlert(zone.id, zones)}
-                className={`w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95 cursor-pointer ${
-                  isCritical
-                    ? 'bg-rose-600 hover:bg-rose-500 text-white'
-                    : 'bg-amber-600 hover:bg-amber-500 text-white'
-                }`}
-              >
-                <Siren className="w-3.5 h-3.5" />
-                Send SOS Alert
-              </button>
-            </div>
-          );
-        })}
-      </div>
-
-      {sosAlerts.length > 0 && (
-        <div>
-          <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-1 mb-2">
-            Alert History ({sosAlerts.length})
-          </h3>
-          <div className="space-y-1.5 max-h-60 overflow-y-auto">
-            {sosAlerts.slice(0, 10).map(entry => (
-              <div
-                key={entry.id}
-                className="flex items-start gap-2 p-2 rounded-lg border border-rose-100 bg-rose-50 text-[11px]"
-              >
-                <Siren className="w-3.5 h-3.5 text-rose-500 flex-shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-slate-800 truncate">{entry.zoneName}</div>
-                  <div className="text-slate-500">{entry.timestamp}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useSentinel } from '../context/SentinelContext';
 import { MapContainer, TileLayer, Polygon, Polyline, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
+import * as maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import { NAGPUR_RIVERS } from '../data/mockData';
 import {
   Layers,
@@ -14,27 +16,18 @@ import {
   Activity,
   MapPin,
   Eye,
+  Sliders,
+  Sun,
+  Moon,
+  Compass
 } from 'lucide-react';
-
-// MapLibre Dynamic Importer helper
-function getMapLibre() {
-  if (typeof window !== 'undefined' && window.maplibregl) {
-    return window.maplibregl;
-  }
-  try {
-    return require('maplibre-gl');
-  } catch (e) {
-    return null;
-  }
-}
 
 // GeoJSON formatting helpers for 3D MapLibre layers
 function zonesToGeoJSON(zones, surgeLevel) {
   return {
     type: 'FeatureCollection',
     features: (zones || []).map(zone => {
-      // Calculate expanded coordinates when flood level surge increases
-      const expansion = (surgeLevel || 0) * 0.0008;
+      const expansion = (surgeLevel || 0) * 0.0006;
       const coords = (zone.geometry || []).map(([lat, lng], idx) => {
         const dLat = (idx % 2 === 0 ? 1 : -1) * expansion;
         const dLng = (idx % 2 === 1 ? 1 : -1) * expansion;
@@ -55,7 +48,7 @@ function zonesToGeoJSON(zones, surgeLevel) {
           severityColor: zone.severityColor,
           housesExposed: zone.housesExposed || Math.round(zone.peopleExposed / 5),
           peopleExposed: zone.peopleExposed,
-          height: 15 + Math.min(zone.priority * 0.6, 60), // Extrusion height for 3D
+          height: 25 + Math.min((zone.priority || 50) * 0.8, 80), // Extrusion height for 3D
         },
         geometry: {
           type: 'Polygon',
@@ -108,15 +101,18 @@ function roadsToGeoJSON(roads) {
 
 // 3D MapLibre Style Builders
 function get3DMapStyle(styleType) {
-  let rasterTile = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
-  let attribution = '© Esri Satellite';
+  let rasterTiles = ['https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'];
+  let attribution = '© CartoDB Voyager, OpenStreetMap';
 
-  if (styleType === 'tactical-dark') {
-    rasterTile = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+  if (styleType === 'satellite-3d') {
+    rasterTiles = ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'];
+    attribution = '© Esri World Imagery';
+  } else if (styleType === 'tactical-dark') {
+    rasterTiles = ['https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'];
     attribution = '© CartoDB Dark';
   } else if (styleType === 'vector-light') {
-    rasterTile = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
-    attribution = '© CartoDB Light';
+    rasterTiles = ['https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'];
+    attribution = '© CartoDB Positron';
   }
 
   return {
@@ -125,7 +121,7 @@ function get3DMapStyle(styleType) {
     sources: {
       'base-tiles': {
         type: 'raster',
-        tiles: [rasterTile],
+        tiles: rasterTiles,
         tileSize: 256,
         attribution,
         maxzoom: 19,
@@ -164,7 +160,7 @@ function LeafletMapAutoUpdater({ center, zoom }) {
   return null;
 }
 
-export default function Nagpur3DMap({ height = '480px' }) {
+export default function Nagpur3DMap({ height = '520px' }) {
   const {
     zones,
     roads,
@@ -177,12 +173,12 @@ export default function Nagpur3DMap({ height = '480px' }) {
 
   const nagpurCenter = currentRegionMeta?.center || [21.1458, 79.0882];
 
-  // 3D Viewport Controls State
+  // Map State & Controls
   const [mapMode, setMapMode] = useState('3d'); // '3d' | '2d'
-  const [mapStyle, setMapStyle] = useState('satellite-3d'); // 'satellite-3d' | 'tactical-dark' | 'vector-light'
-  const [pitch, setPitch] = useState(55); // 0 to 75
-  const [bearing, setBearing] = useState(-20);
-  const [surgeLevel, setSurgeLevel] = useState(1.4); // Flood surge slider (meters)
+  const [mapStyle, setMapStyle] = useState('google-streets'); // 'google-streets' | 'satellite-3d' | 'tactical-dark' | 'vector-light'
+  const [pitch, setPitch] = useState(55);
+  const [bearing, setBearing] = useState(-15);
+  const [surgeLevel, setSurgeLevel] = useState(1.4);
   const [show3dBuildings, setShow3dBuildings] = useState(true);
   const [showRivers, setShowRivers] = useState(true);
   const [hoveredFeature, setHoveredFeature] = useState(null);
@@ -190,16 +186,26 @@ export default function Nagpur3DMap({ height = '480px' }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
 
+  // Tile layer mapping for 2D Leaflet Google Maps style
+  const get2DTileUrl = () => {
+    switch (mapStyle) {
+      case 'satellite-3d':
+        return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+      case 'tactical-dark':
+        return 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+      case 'vector-light':
+        return 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+      case 'google-streets':
+      default:
+        // High detail CartoDB Voyager Google Maps style with vivid roads & street labels
+        return 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+    }
+  };
+
   // Initialize MapLibre 3D WebGL Canvas
   useEffect(() => {
     if (mapMode !== '3d') return;
     if (!containerRef.current) return;
-
-    let maplib = getMapLibre();
-    if (!maplib) {
-      setMapMode('2d');
-      return;
-    }
 
     try {
       if (mapRef.current) {
@@ -207,17 +213,20 @@ export default function Nagpur3DMap({ height = '480px' }) {
         mapRef.current = null;
       }
 
-      const map = new maplib.Map({
+      const map = new maplibregl.Map({
         container: containerRef.current,
         style: get3DMapStyle(mapStyle),
         center: [nagpurCenter[1], nagpurCenter[0]],
-        zoom: 12.2,
+        zoom: 12.4,
         pitch: pitch,
         bearing: bearing,
         antialias: true,
       });
 
       mapRef.current = map;
+
+      map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
+      map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
 
       map.on('load', () => {
         try {
@@ -240,7 +249,7 @@ export default function Nagpur3DMap({ height = '480px' }) {
               'fill-extrusion-color': ['get', 'severityColor'],
               'fill-extrusion-height': ['get', 'height'],
               'fill-extrusion-base': 0,
-              'fill-extrusion-opacity': 0.65,
+              'fill-extrusion-opacity': 0.7,
             },
           });
 
@@ -252,42 +261,28 @@ export default function Nagpur3DMap({ height = '480px' }) {
             paint: {
               'line-color': ['get', 'severityColor'],
               'line-width': 3,
-              'line-opacity': 0.9,
             },
           });
 
-          // 2. Add Nag & Pili River Flows
+          // 2. Add Nagpur Rivers Layer
           map.addSource('rivers-3d', {
             type: 'geojson',
             data: riversToGeoJSON(NAGPUR_RIVERS),
           });
 
           map.addLayer({
-            id: 'rivers-glow',
+            id: 'rivers-line',
             type: 'line',
             source: 'rivers-3d',
             layout: { visibility: showRivers ? 'visible' : 'none' },
             paint: {
               'line-color': ['get', 'color'],
-              'line-width': 8,
-              'line-opacity': 0.4,
-              'line-blur': 4,
+              'line-width': 5,
+              'line-blur': 1,
             },
           });
 
-          map.addLayer({
-            id: 'rivers-core',
-            type: 'line',
-            source: 'rivers-3d',
-            layout: { visibility: showRivers ? 'visible' : 'none' },
-            paint: {
-              'line-color': '#38bdf8',
-              'line-width': 4,
-              'line-opacity': 0.95,
-            },
-          });
-
-          // 3. Add Nagpur Roads
+          // 3. Add Nagpur Roads Layer
           map.addSource('roads-3d', {
             type: 'geojson',
             data: roadsToGeoJSON(roads),
@@ -300,64 +295,52 @@ export default function Nagpur3DMap({ height = '480px' }) {
             paint: {
               'line-color': [
                 'case',
-                ['get', 'isBlocked'], '#ef4444',
-                '#06b6d4'
+                ['get', 'isBlocked'],
+                '#ef4444', // Red for blocked roads
+                '#10b981', // Green for open roads
               ],
-              'line-width': [
-                'case',
-                ['get', 'isBlocked'], 5,
-                3.5
-              ],
-              'line-dasharray': [
-                'case',
-                ['get', 'isBlocked'], ['literal', [2, 2]],
-                ['literal', [1, 0]]
-              ],
+              'line-width': ['case', ['get', 'isBlocked'], 5, 3.5],
+              'line-dasharray': ['case', ['get', 'isBlocked'], [2, 1], [1, 0]],
             },
           });
 
-          // Click Handlers
+          // Interactive click popups on 3D zone extrusions
           map.on('click', 'zones-extrusion', (e) => {
             if (e.features && e.features[0]) {
-              const zoneId = e.features[0].properties.id;
-              setSelectedZoneId(zoneId);
+              const props = e.features[0].properties;
+              setSelectedZoneId(props.id);
+
+              new maplibregl.Popup()
+                .setLngLat(e.lngLat)
+                .setHTML(`
+                  <div style="font-family: sans-serif; padding: 4px;">
+                    <strong style="color: #0f172a; font-size: 13px;">${props.name}</strong><br/>
+                    <span style="font-size: 11px; color: ${props.severityColor}; font-weight: bold;">
+                      Priority Score: ${props.priority} (${props.severity?.toUpperCase()})
+                    </span><br/>
+                    <span style="font-size: 11px; color: #64748b;">
+                      Exposed Population: ${Number(props.peopleExposed).toLocaleString()} residents
+                    </span>
+                  </div>
+                `)
+                .addTo(map);
             }
           });
 
-          map.on('click', 'roads-line', (e) => {
-            if (e.features && e.features[0]) {
-              const roadId = e.features[0].properties.id;
-              toggleRoadStatus(roadId);
-            }
+          map.on('mouseenter', 'zones-extrusion', () => {
+            map.getCanvas().style.cursor = 'pointer';
           });
-
-          // Mouseover Tooltips
-          map.on('mousemove', 'zones-extrusion', (e) => {
-            if (e.features && e.features[0]) {
-              map.getCanvas().style.cursor = 'pointer';
-              const p = e.features[0].properties;
-              setHoveredFeature({
-                type: 'zone',
-                name: p.name,
-                housesExposed: p.housesExposed,
-                peopleExposed: p.peopleExposed,
-                priority: p.priority,
-                severityColor: p.severityColor,
-              });
-            }
-          });
-
           map.on('mouseleave', 'zones-extrusion', () => {
             map.getCanvas().style.cursor = '';
-            setHoveredFeature(null);
           });
 
         } catch (err) {
-          console.warn('[Nagpur3DMap] Layer setup warning:', err);
+          console.warn('[Nagpur3DMap] 3D layer setup warning:', err);
         }
       });
-    } catch (err) {
-      console.error('[Nagpur3DMap] MapLibre fallback to 2D:', err);
+
+    } catch (e) {
+      console.error('[Nagpur3DMap] MapLibre 3D error:', e);
       setMapMode('2d');
     }
 
@@ -367,274 +350,268 @@ export default function Nagpur3DMap({ height = '480px' }) {
         mapRef.current = null;
       }
     };
-  }, [mapMode, mapStyle]);
+  }, [mapMode, mapStyle, surgeLevel, show3dBuildings, showRivers]);
 
-  // Handle Dynamic Pitch & Surge Level updates on existing map instance
+  // Update pitch/bearing dynamically
   useEffect(() => {
-    if (mapRef.current && mapMode === '3d') {
+    if (mapRef.current) {
       mapRef.current.setPitch(pitch);
       mapRef.current.setBearing(bearing);
     }
-  }, [pitch, bearing, mapMode]);
-
-  useEffect(() => {
-    if (mapRef.current && mapMode === '3d') {
-      const src = mapRef.current.getSource('zones-3d');
-      if (src) {
-        src.setData(zonesToGeoJSON(zones, surgeLevel));
-      }
-    }
-  }, [surgeLevel, zones, mapMode]);
-
-  useEffect(() => {
-    if (mapRef.current && mapMode === '3d') {
-      if (mapRef.current.getLayer('zones-extrusion')) {
-        mapRef.current.setLayoutProperty(
-          'zones-extrusion',
-          'visibility',
-          show3dBuildings ? 'visible' : 'none'
-        );
-      }
-    }
-  }, [show3dBuildings, mapMode]);
+  }, [pitch, bearing]);
 
   return (
-    <div className="relative w-full rounded-2xl overflow-hidden border border-slate-200 shadow-lg bg-slate-900 flex flex-col" style={{ height }}>
+    <div className="relative w-full rounded-2xl overflow-hidden border border-slate-200 shadow-md bg-slate-900 font-sans" style={{ height }}>
       
-      {/* ── Top Floating Toolbar (Mode, Styles, Camera controls) ───────────── */}
+      {/* ─── Top Control Toolbar Bar ────────────────────────────────────────── */}
       <div className="absolute top-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
         
-        {/* Left Pills: Mode Switcher & 3D Pitch Controls */}
-        <div className="flex items-center space-x-1.5 bg-slate-900/90 backdrop-blur-md p-1 rounded-xl border border-slate-700/60 shadow-xl pointer-events-auto text-xs text-white">
+        {/* Left Badge & Mode Switcher */}
+        <div className="pointer-events-auto flex items-center space-x-1.5 bg-slate-950/85 backdrop-blur-md border border-slate-800 rounded-xl p-1 shadow-lg text-xs">
+          {/* 3D Button */}
           <button
             onClick={() => setMapMode('3d')}
-            className={`flex items-center space-x-1 px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
               mapMode === '3d'
-                ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/30'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md shadow-cyan-500/20'
+                : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             <Box className="w-3.5 h-3.5" />
-            <span>3D Nagpur Map</span>
+            <span>3D Photorealistic</span>
           </button>
 
+          {/* 2D Google-Style Button */}
           <button
             onClick={() => setMapMode('2d')}
-            className={`flex items-center space-x-1 px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
               mapMode === '2d'
-                ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/30'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-white text-slate-900 shadow-md border border-slate-200'
+                : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Layers className="w-3.5 h-3.5" />
-            <span>2D Tactical</span>
-          </button>
-
-          {mapMode === '3d' && (
-            <div className="flex items-center space-x-1 pl-2 border-l border-slate-700/80">
-              <span className="text-[10px] text-slate-400 font-mono-numeric uppercase px-1">Tilt:</span>
-              <button
-                onClick={() => setPitch(0)}
-                className={`px-1.5 py-0.5 rounded text-[11px] hover:bg-slate-800 ${pitch === 0 ? 'text-cyan-400 font-bold bg-slate-800' : 'text-slate-400'}`}
-                title="Top-down 0°"
-              >
-                0°
-              </button>
-              <button
-                onClick={() => setPitch(35)}
-                className={`px-1.5 py-0.5 rounded text-[11px] hover:bg-slate-800 ${pitch === 35 ? 'text-cyan-400 font-bold bg-slate-800' : 'text-slate-400'}`}
-                title="Isometric 35°"
-              >
-                35°
-              </button>
-              <button
-                onClick={() => setPitch(55)}
-                className={`px-1.5 py-0.5 rounded text-[11px] hover:bg-slate-800 ${pitch === 55 ? 'text-cyan-400 font-bold bg-slate-800' : 'text-slate-400'}`}
-                title="3D Perspective 55°"
-              >
-                55°
-              </button>
-              <button
-                onClick={() => setPitch(75)}
-                className={`px-1.5 py-0.5 rounded text-[11px] hover:bg-slate-800 ${pitch === 75 ? 'text-cyan-400 font-bold bg-slate-800' : 'text-slate-400'}`}
-                title="Cinematic Horizon 75°"
-              >
-                75°
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Right Pills: Map Style & Layer Toggles */}
-        <div className="flex items-center space-x-2 bg-slate-900/90 backdrop-blur-md p-1 rounded-xl border border-slate-700/60 shadow-xl pointer-events-auto text-xs text-white">
-          
-          <button
-            onClick={() => setShow3dBuildings(!show3dBuildings)}
-            className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
-              show3dBuildings ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
-            }`}
-            title="Toggle 3D Buildings Extrusions"
-          >
-            3D Footprints
-          </button>
-
-          <select
-            value={mapStyle}
-            onChange={(e) => setMapStyle(e.target.value)}
-            className="bg-slate-800 text-slate-200 rounded-lg px-2 py-1 text-xs border border-slate-700 focus:outline-none cursor-pointer"
-          >
-            <option value="satellite-3d">🛰️ 3D Satellite</option>
-            <option value="tactical-dark">🌃 Dark Command</option>
-            <option value="vector-light">☀️ Light Vector</option>
-          </select>
-
-          <button
-            onClick={() => setCurrentView('map')}
-            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
-            title="Expand to Fullscreen Map"
-          >
-            <Maximize2 className="w-3.5 h-3.5" />
+            <MapPin className="w-3.5 h-3.5 text-cyan-600" />
+            <span>2D Detailed Map</span>
           </button>
         </div>
 
+        {/* Right Base Map Style Selector */}
+        <div className="pointer-events-auto flex items-center space-x-1 bg-slate-950/85 backdrop-blur-md border border-slate-800 rounded-xl p-1 shadow-lg text-xs">
+          <button
+            onClick={() => setMapStyle('google-streets')}
+            className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
+              mapStyle === 'google-streets' ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-400/40' : 'text-slate-400 hover:text-slate-200'
+            }`}
+            title="Google Maps Style Streets with Road Names"
+          >
+            🗺️ Google Streets
+          </button>
+
+          <button
+            onClick={() => setMapStyle('satellite-3d')}
+            className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
+              mapStyle === 'satellite-3d' ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-400/40' : 'text-slate-400 hover:text-slate-200'
+            }`}
+            title="Esri Photorealistic Satellite Hybrid"
+          >
+            🛰️ Satellite
+          </button>
+
+          <button
+            onClick={() => setMapStyle('tactical-dark')}
+            className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
+              mapStyle === 'tactical-dark' ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-400/40' : 'text-slate-400 hover:text-slate-200'
+            }`}
+            title="Dark Command Tactical View"
+          >
+            🕶️ Dark Mode
+          </button>
+        </div>
       </div>
 
-      {/* ── Central Interactive Map Viewport (3D or 2D) ────────────────────── */}
-      <div className="flex-1 w-full relative overflow-hidden">
-        {mapMode === '3d' ? (
-          <div ref={containerRef} className="w-full h-full bg-slate-950" />
-        ) : (
-          <MapContainer
-            center={nagpurCenter}
-            zoom={12}
-            zoomControl={true}
-            scrollWheelZoom={true}
-            className="h-full w-full bg-slate-100"
-          >
+      {/* ─── 3D Map View Container ─────────────────────────────────────────── */}
+      {mapMode === '3d' && (
+        <div ref={containerRef} className="w-full h-full relative" />
+      )}
+
+      {/* ─── 2D Leaflet Map Container (Google Maps High Detail Style) ───────── */}
+      {mapMode === '2d' && (
+        <MapContainer
+          center={nagpurCenter}
+          zoom={12.5}
+          scrollWheelZoom={true}
+          className="w-full h-full z-0"
+        >
+          <LeafletMapAutoUpdater center={nagpurCenter} zoom={12.5} />
+
+          {/* High Detail Basemap Tile Layer */}
+          <TileLayer
+            url={get2DTileUrl()}
+            attribution="© CartoDB Voyager, OpenStreetMap contributors"
+            maxZoom={19}
+          />
+
+          {/* Satellite Labels Overlay if Satellite style selected */}
+          {mapStyle === 'satellite-3d' && (
             <TileLayer
-              url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-              subdomains="abcd"
-              attribution="© CartoDB"
+              url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png"
+              attribution="© CartoDB Labels"
+              maxZoom={19}
             />
-            <LeafletMapAutoUpdater center={nagpurCenter} zoom={12} />
+          )}
 
-            {/* Nag & Pili Rivers on 2D Map */}
-            {NAGPUR_RIVERS.map(river => (
-              <Polyline
-                key={river.id}
-                positions={river.coordinates.map(([lng, lat]) => [lat, lng])}
-                pathOptions={{ color: river.color, weight: 6, opacity: 0.8 }}
-              />
-            ))}
-
-            {/* Roads */}
-            {roads.map(road => (
-              <Polyline
-                key={road.id}
-                positions={road.geometry}
-                eventHandlers={{ click: () => toggleRoadStatus(road.id) }}
-                pathOptions={{
-                  color: road.status === 'blocked' ? '#ef4444' : '#06b6d4',
-                  weight: road.status === 'blocked' ? 5 : 3.5,
-                  dashArray: road.status === 'blocked' ? '6, 6' : null,
-                }}
-              />
-            ))}
-
-            {/* Hazard Zones */}
-            {zones.map(zone => (
+          {/* Render Nagpur Flood Risk Polygons */}
+          {zones.map((zone) => {
+            const isSelected = selectedZoneId === zone.id;
+            return (
               <Polygon
                 key={zone.id}
                 positions={zone.geometry}
-                eventHandlers={{ click: () => setSelectedZoneId(zone.id) }}
                 pathOptions={{
-                  color: zone.severityColor,
-                  fillColor: zone.severityColor,
-                  fillOpacity: zone.severity === 'red' ? 0.38 : 0.22,
-                  weight: selectedZoneId === zone.id ? 4 : 2,
+                  color: zone.severityColor || '#3b82f6',
+                  fillColor: zone.severityColor || '#3b82f6',
+                  fillOpacity: isSelected ? 0.65 : 0.38,
+                  weight: isSelected ? 4 : 2,
+                }}
+                eventHandlers={{
+                  click: () => setSelectedZoneId(zone.id),
                 }}
               >
                 <Popup>
-                  <div className="p-1 font-sans text-xs">
-                    <strong className="text-slate-900 block">{zone.name}</strong>
-                    <div className="text-slate-600 mt-0.5">
-                      Exposed Houses: <strong>{zone.housesExposed}</strong>
-                    </div>
-                    <div className="text-slate-500 mt-0.5">
-                      Assigned: <strong>{zone.assignedSquad}</strong>
+                  <div className="font-sans p-1 text-slate-800">
+                    <h3 className="font-bold text-sm text-slate-900">{zone.name}</h3>
+                    <div className="text-xs mt-1 space-y-0.5">
+                      <div className="flex items-center space-x-1 font-bold" style={{ color: zone.severityColor }}>
+                        <span>Priority Score: {zone.priority} ({zone.severity?.toUpperCase()})</span>
+                      </div>
+                      <div>Exposed Population: <strong>{zone.peopleExposed?.toLocaleString()}</strong></div>
+                      <div>Assigned Squad: <strong>{zone.assignedSquad}</strong></div>
+                      <div className="text-[11px] text-slate-500 mt-1">{zone.rationale}</div>
                     </div>
                   </div>
                 </Popup>
               </Polygon>
-            ))}
-          </MapContainer>
-        )}
-      </div>
+            );
+          })}
 
-      {/* ── Hover Tooltip Card Overlay ────────────────────────────────────── */}
-      {hoveredFeature && (
-        <div className="absolute top-16 left-4 z-20 bg-slate-900/95 border border-slate-700/80 text-white p-3 rounded-xl shadow-2xl backdrop-blur-md text-xs pointer-events-none max-w-xs space-y-1">
-          <div className="font-extrabold text-sm text-cyan-300">{hoveredFeature.name}</div>
-          <div className="flex items-center space-x-2 text-slate-300">
-            <span>Risk Priority:</span>
-            <span className="px-2 py-0.5 rounded text-black font-black" style={{ backgroundColor: hoveredFeature.severityColor }}>
-              {hoveredFeature.priority} / 100
-            </span>
+          {/* Render Nagpur Rivers Channels */}
+          {showRivers &&
+            NAGPUR_RIVERS.map((river) => (
+              <Polyline
+                key={river.id}
+                positions={river.coordinates.map(([lng, lat]) => [lat, lng])}
+                pathOptions={{
+                  color: river.color,
+                  weight: 5,
+                  opacity: 0.85,
+                }}
+              >
+                <Popup>
+                  <div className="font-sans text-xs">
+                    <strong>{river.name}</strong><br />
+                    Water Surge: +{river.waterSurgeMeters}m
+                  </div>
+                </Popup>
+              </Polyline>
+            ))}
+
+          {/* Render Nagpur Roads Network */}
+          {roads.map((road) => {
+            const isBlocked = road.status === 'blocked';
+            return (
+              <Polyline
+                key={road.id}
+                positions={road.geometry}
+                pathOptions={{
+                  color: isBlocked ? '#ef4444' : '#10b981',
+                  weight: isBlocked ? 5 : 3.5,
+                  dashArray: isBlocked ? '6, 6' : null,
+                  opacity: 0.9,
+                }}
+                eventHandlers={{
+                  click: () => toggleRoadStatus(road.id),
+                }}
+              >
+                <Popup>
+                  <div className="font-sans text-xs">
+                    <strong>{road.name}</strong><br />
+                    Type: {road.type}<br />
+                    Status: <span style={{ color: isBlocked ? '#ef4444' : '#10b981', fontWeight: 'bold' }}>
+                      {road.status?.toUpperCase()}
+                    </span><br />
+                    <button
+                      onClick={() => toggleRoadStatus(road.id)}
+                      style={{
+                        marginTop: '4px',
+                        padding: '2px 8px',
+                        background: '#0ea5e9',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '11px',
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      Toggle Block Status
+                    </button>
+                  </div>
+                </Popup>
+              </Polyline>
+            );
+          })}
+        </MapContainer>
+      )}
+
+      {/* ─── Bottom Floating 3D Controls Dock ────────────────────────────────── */}
+      {mapMode === '3d' && (
+        <div className="absolute bottom-4 left-4 right-4 z-20 pointer-events-none flex flex-wrap items-center justify-between gap-3">
+          
+          {/* Tilt & Rotation Controls */}
+          <div className="pointer-events-auto bg-slate-950/90 backdrop-blur-md border border-slate-800 rounded-xl p-2.5 shadow-xl flex items-center space-x-3 text-xs text-slate-300">
+            <div className="flex items-center space-x-1.5">
+              <Compass className="w-4 h-4 text-cyan-400" />
+              <span>Tilt: <strong>{pitch}°</strong></span>
+              <input
+                type="range"
+                min="0"
+                max="70"
+                value={pitch}
+                onChange={(e) => setPitch(Number(e.target.value))}
+                className="w-20 accent-cyan-500 cursor-pointer"
+              />
+            </div>
+
+            <div className="w-px h-4 bg-slate-800" />
+
+            <div className="flex items-center space-x-1.5">
+              <span>Rotate: <strong>{bearing}°</strong></span>
+              <button
+                onClick={() => setBearing((prev) => (prev - 45) % 360)}
+                className="p-1 rounded bg-slate-900 border border-slate-700 hover:text-cyan-300 transition-colors"
+                title="Rotate 45°"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
-          <div className="text-slate-300 font-mono-numeric">
-            🏠 <strong>{hoveredFeature.housesExposed?.toLocaleString()}</strong> Houses Exposed ({hoveredFeature.peopleExposed?.toLocaleString()} Residents)
+
+          {/* Flood Surge Simulator Slider */}
+          <div className="pointer-events-auto bg-slate-950/90 backdrop-blur-md border border-slate-800 rounded-xl p-2.5 shadow-xl flex items-center space-x-2 text-xs text-slate-300">
+            <Droplet className="w-4 h-4 text-cyan-400 animate-bounce" />
+            <span className="font-mono text-[11px]">Surge Level: <strong className="text-cyan-300">+{surgeLevel.toFixed(1)}m</strong></span>
+            <input
+              type="range"
+              min="0.5"
+              max="3.5"
+              step="0.1"
+              value={surgeLevel}
+              onChange={(e) => setSurgeLevel(Number(e.target.value))}
+              className="w-24 accent-cyan-500 cursor-pointer"
+            />
           </div>
         </div>
       )}
-
-      {/* ── Bottom Interactive Flood Surge Elevation Controller ───────────── */}
-      <div className="absolute bottom-3 left-3 right-3 z-20 bg-slate-900/95 border border-slate-700/80 p-3 rounded-2xl backdrop-blur-md text-white shadow-2xl flex flex-col md:flex-row items-center justify-between gap-3">
-        
-        <div className="flex items-center space-x-2.5">
-          <div className="p-2 rounded-xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
-            <Droplet className="w-5 h-5 animate-pulse" />
-          </div>
-          <div>
-            <div className="flex items-center space-x-2">
-              <span className="text-xs font-extrabold tracking-wider uppercase text-cyan-400">
-                Nag River Live Flood Surge Simulator
-              </span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
-                +{surgeLevel.toFixed(1)}m Water Surge
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-400">
-              Drag slider to simulate real-time inundation surge across Manish Nagar &amp; Somalwada sectors
-            </p>
-          </div>
-        </div>
-
-        {/* Surge Slider */}
-        <div className="flex items-center space-x-3 w-full md:w-72">
-          <span className="text-[11px] text-slate-400 font-mono font-bold">0.0m</span>
-          <input
-            type="range"
-            min="0.0"
-            max="4.5"
-            step="0.1"
-            value={surgeLevel}
-            onChange={(e) => setSurgeLevel(parseFloat(e.target.value))}
-            className="w-full accent-cyan-400 cursor-pointer h-2 bg-slate-800 rounded-lg"
-          />
-          <span className="text-[11px] text-rose-400 font-mono font-bold">+4.5m</span>
-        </div>
-
-        {/* Quick Reset */}
-        <button
-          onClick={() => setSurgeLevel(1.4)}
-          className="flex items-center space-x-1 text-[11px] text-slate-400 hover:text-white px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
-        >
-          <RotateCcw className="w-3 h-3" />
-          <span>Reset</span>
-        </button>
-
-      </div>
-
     </div>
   );
 }
