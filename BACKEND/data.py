@@ -1,215 +1,258 @@
-# Seed Data for SentinelPlan - Nagpur, Maharashtra Flood Response Scenario
+# Seed Data for Nagpur Flood Safe - Backend API
+# Focused exclusively on Nagpur City, Maharashtra, India
 
 INITIAL_ZONES_DATA = [
     {
         "id": "zone-1",
-        "name": "Ambazari & Subhash Nagar Lowlands",
+        "name": "Manish Nagar Underpass & Rail Belt",
         "geometry": {
             "type": "Polygon",
             "coordinates": [
                 [
-                    [79.035, 21.125],
-                    [79.042, 21.142],
-                    [79.060, 21.138],
-                    [79.052, 21.120],
-                    [79.035, 21.125]
+                    [79.068, 21.098],
+                    [79.078, 21.110],
+                    [79.088, 21.102],
+                    [79.075, 21.092],
+                    [79.068, 21.098]
                 ]
             ]
         },
-        "people_exposed": 3200,
-        "houses_exposed": 640,
-        "status": "pending",
-        "assigned_squad": None,
-        "assigned_shelter": "Ambazari Relief Center"
+        "people_exposed": 3400,
+        "houses_exposed": 680,
+        "status": "assigned",
+        "assigned_squad": "Squad Delta-1 (Underpass Rescue)",
+        "assigned_shelter": "Ambazari Municipal Relief Center"
     },
     {
         "id": "zone-2",
-        "name": "Nag River Central Corridor (Sitabuldi)",
+        "name": "Narendra Nagar, Beltarodi & Besa Basin",
         "geometry": {
             "type": "Polygon",
             "coordinates": [
                 [
-                    [79.075, 21.145],
-                    [79.082, 21.162],
-                    [79.100, 21.155],
-                    [79.092, 21.138],
-                    [79.075, 21.145]
+                    [79.078, 21.112],
+                    [79.092, 21.122],
+                    [79.102, 21.110],
+                    [79.088, 21.100],
+                    [79.078, 21.112]
                 ]
             ]
         },
-        "people_exposed": 2400,
-        "houses_exposed": 480,
-        "status": "pending",
-        "assigned_squad": None,
-        "assigned_shelter": "Mankapur Sports Complex"
+        "people_exposed": 2900,
+        "houses_exposed": 580,
+        "status": "assigned",
+        "assigned_squad": "Squad Bravo-3 (NMC Quick Response)",
+        "assigned_shelter": "Mankapur Indoor Sports Complex"
     },
     {
         "id": "zone-3",
-        "name": "Pili River North Basin (Kalamna)",
+        "name": "Ambazari Spillway & Friends Colony",
         "geometry": {
             "type": "Polygon",
             "coordinates": [
                 [
-                    [79.100, 21.175],
-                    [79.108, 21.192],
-                    [79.125, 21.188],
-                    [79.118, 21.168],
-                    [79.100, 21.175]
+                    [79.038, 21.126],
+                    [79.048, 21.142],
+                    [79.062, 21.135],
+                    [79.052, 21.118],
+                    [79.038, 21.126]
                 ]
             ]
         },
-        "people_exposed": 1800,
-        "houses_exposed": 360,
-        "status": "pending",
-        "assigned_squad": None,
-        "assigned_shelter": "Resimbagh Civic Center"
+        "people_exposed": 4200,
+        "houses_exposed": 840,
+        "status": "assigned",
+        "assigned_squad": "Alpha Tactical Flood Unit",
+        "assigned_shelter": "Sitabuldi Civic Relief Hub"
     },
     {
         "id": "zone-4",
-        "name": "Gorewada Catchment & Wardha Road Link",
+        "name": "Pratap Nagar & Somalwar School Area",
         "geometry": {
             "type": "Polygon",
             "coordinates": [
                 [
-                    [79.040, 21.100],
-                    [79.048, 21.118],
-                    [79.065, 21.112],
-                    [79.058, 21.095],
-                    [79.040, 21.100]
+                    [79.055, 21.115],
+                    [79.068, 21.128],
+                    [79.078, 21.118],
+                    [79.065, 21.106],
+                    [79.055, 21.115]
                 ]
             ]
         },
-        "people_exposed": 950,
-        "houses_exposed": 190,
+        "people_exposed": 2100,
+        "houses_exposed": 420,
         "status": "pending",
         "assigned_squad": None,
-        "assigned_shelter": "Sitabuldi Community Shelter"
+        "assigned_shelter": "Resimbagh Ground Evacuation Center"
+    },
+    {
+        "id": "zone-5",
+        "name": "Gorewada Nullah (Zingabai Takli & Mankapur)",
+        "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+                [
+                    [79.052, 21.172],
+                    [79.065, 21.190],
+                    [79.082, 21.182],
+                    [79.070, 21.165],
+                    [79.052, 21.172]
+                ]
+            ]
+        },
+        "people_exposed": 3100,
+        "houses_exposed": 620,
+        "status": "pending",
+        "assigned_squad": None,
+        "assigned_shelter": "Mankapur Indoor Sports Complex"
+    },
+    {
+        "id": "zone-6",
+        "name": "Wardha Road Highway & MIHAN Feeder",
+        "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+                [
+                    [79.042, 21.075],
+                    [79.058, 21.092],
+                    [79.070, 21.082],
+                    [79.054, 21.066],
+                    [79.042, 21.075]
+                ]
+            ]
+        },
+        "people_exposed": 1600,
+        "houses_exposed": 320,
+        "status": "assigned",
+        "assigned_squad": "MIHAN Emergency Response Team",
+        "assigned_shelter": "MIHAN Emergency Service Center"
     }
 ]
 
 INITIAL_ROADS_DATA = [
     {
         "id": "road-1",
-        "name": "Wardha Road Highway Corridor (NH-44)",
-        "status": "open",
+        "name": "Manish Nagar Railway Underpass Corridor",
+        "status": "blocked",
         "connects_zone_ids": ["zone-1", "zone-4"],
         "geometry": {
             "type": "LineString",
             "coordinates": [
-                [79.055, 21.090],
-                [79.060, 21.115],
-                [79.065, 21.135],
-                [79.075, 21.150]
+                [79.068, 21.098],
+                [79.075, 21.105],
+                [79.082, 21.110]
             ]
         }
     },
     {
         "id": "road-2",
-        "name": "Ambazari Lake Spillway Expressway",
-        "status": "open",
-        "connects_zone_ids": ["zone-1", "zone-2"],
+        "name": "Narendra Nagar Flyover & Arterial Belt",
+        "status": "blocked",
+        "connects_zone_ids": ["zone-2", "zone-1"],
         "geometry": {
             "type": "LineString",
             "coordinates": [
-                [79.045, 21.130],
-                [79.060, 21.140],
-                [79.075, 21.148]
+                [79.078, 21.112],
+                [79.088, 21.120],
+                [79.095, 21.125]
             ]
         }
     },
     {
         "id": "road-3",
-        "name": "Nag River Urban Bypass Corridor",
+        "name": "Wardha Road Highway (NH-44 / Airport Corridor)",
         "status": "open",
-        "connects_zone_ids": ["zone-2"],
+        "connects_zone_ids": ["zone-1", "zone-6"],
         "geometry": {
             "type": "LineString",
             "coordinates": [
-                [79.075, 21.148],
-                [79.090, 21.155],
-                [79.105, 21.165]
+                [79.042, 21.075],
+                [79.058, 21.095],
+                [79.070, 21.125],
+                [79.080, 21.145]
             ]
         }
     },
     {
         "id": "road-4",
-        "name": "Sitabuldi Central Metro Arterial",
+        "name": "Ambazari Ring Road & Laxmi Nagar Bypass",
         "status": "open",
-        "connects_zone_ids": ["zone-2"],
+        "connects_zone_ids": ["zone-3", "zone-4"],
         "geometry": {
             "type": "LineString",
             "coordinates": [
-                [79.065, 21.135],
-                [79.080, 21.145],
-                [79.090, 21.155]
+                [79.038, 21.126],
+                [79.052, 21.135],
+                [79.065, 21.142]
             ]
         }
     },
     {
         "id": "road-5",
-        "name": "Kamptee Highway Emergency Pass (NH-53)",
+        "name": "Gorewada Nullah Mankapur Bridge (NH-53)",
         "status": "open",
-        "connects_zone_ids": ["zone-3"],
+        "connects_zone_ids": ["zone-5"],
         "geometry": {
             "type": "LineString",
             "coordinates": [
-                [79.105, 21.165],
-                [79.115, 21.180],
-                [79.130, 21.195]
+                [79.052, 21.172],
+                [79.068, 21.182],
+                [79.082, 21.190]
             ]
         }
     },
     {
         "id": "road-6",
-        "name": "Hingna Ring Road Feeder",
+        "name": "Hingna Road - MIHAN Connector Link",
         "status": "open",
-        "connects_zone_ids": ["zone-1", "zone-4"],
+        "connects_zone_ids": ["zone-6", "zone-2"],
         "geometry": {
             "type": "LineString",
             "coordinates": [
-                [79.025, 21.110],
-                [79.040, 21.125],
-                [79.055, 21.135]
+                [79.042, 21.075],
+                [79.058, 21.090],
+                [79.075, 21.105]
             ]
         }
     },
     {
         "id": "road-7",
-        "name": "Gorewada Dam Bypass Pass",
+        "name": "Pratap Nagar Somalwar School Radial Road",
         "status": "open",
-        "connects_zone_ids": ["zone-4"],
+        "connects_zone_ids": ["zone-4", "zone-3"],
         "geometry": {
             "type": "LineString",
             "coordinates": [
-                [79.030, 21.170],
-                [79.045, 21.185],
-                [79.055, 21.195]
+                [79.055, 21.115],
+                [79.068, 21.128],
+                [79.075, 21.138]
             ]
         }
     }
 ]
 
 INITIAL_STATS_DATA = {
-    "responders_deployed": 14,
-    "responders_available": 22,
-    "shelters_at_capacity": 2,
-    "shelters_total": 5
+    "responders_deployed": 18,
+    "responders_available": 24,
+    "shelters_at_capacity": 3,
+    "shelters_total": 6
 }
 
 INITIAL_ALERTS_DATA = [
     {
         "id": "alert-1",
-        "timestamp": "2026-08-14T14:28:10Z",
-        "message": "System Initialized — Nagpur Municipal Corporation (NMC) Flood Telemetry active."
+        "timestamp": "2026-07-29T08:15:00Z",
+        "message": "🚨 NAGPUR FLOOD ALERT — Torrential monsoon downpour (140mm in 6h) triggering waterlogging in Manish Nagar Underpass & Beltarodi."
     },
     {
         "id": "alert-2",
-        "timestamp": "2026-08-14T14:30:45Z",
-        "message": "Nag River Level Alert — Sitabuldi gauge station recorded +1.6m surge above danger level."
+        "timestamp": "2026-07-29T09:30:00Z",
+        "message": "⚠️ NAG RIVER TELEMETRY — Sitabuldi gauge station recorded +1.8m surge above danger mark."
     },
     {
         "id": "alert-3",
-        "timestamp": "2026-08-14T14:32:00Z",
-        "message": "CRITICAL WARNING — Ambazari & Subhash Nagar Lowlands flood priority elevated to 85 (RED)."
+        "timestamp": "2026-07-29T10:45:00Z",
+        "message": "🌊 GOREWADA SPILLWAY — Overflow canal submerging Mankapur & Zingabai Takli lowlands. Emergency evacuation active."
     }
 ]

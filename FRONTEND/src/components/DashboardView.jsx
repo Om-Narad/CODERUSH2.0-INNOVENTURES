@@ -58,14 +58,14 @@ export default function DashboardView() {
           <div>
             <div className="flex items-center space-x-2">
               <h1 className="text-lg font-bold text-slate-900 tracking-tight font-sans">
-                Sentinel<span className="text-cyan-600">Plan</span> — Nagpur Flood Command Center
+                Nagpur<span className="text-cyan-600">FloodSafe</span> — Real-Time Emergency Command
               </h1>
               <span className="text-xs text-cyan-700 font-bold px-2 py-0.5 rounded-full bg-cyan-50 border border-cyan-200 uppercase tracking-wide">
                 Nagpur (MH)
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5 max-w-2xl font-medium">
-              Real-time Nag &amp; Pili River monitoring, route-blockage simulation, and house-vulnerability matrix.
+              Real-time Nag River, Pili River &amp; Gorewada Nullah flood monitoring, route-blockage simulation, and evacuation matrix.
             </p>
           </div>
         </div>

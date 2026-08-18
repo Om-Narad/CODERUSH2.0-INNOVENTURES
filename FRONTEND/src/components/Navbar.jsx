@@ -41,14 +41,14 @@ export default function Navbar() {
           <div>
             <div className="flex items-center space-x-2">
               <span className="text-xl font-bold tracking-tight text-slate-800 font-sans">
-                Sentinel<span className="text-cyan-500">Plan</span>
+                Nagpur<span className="text-cyan-500">FloodSafe</span>
               </span>
               <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-50 text-cyan-700 border border-cyan-200 uppercase tracking-wider">
                 Nagpur (MH)
               </span>
             </div>
             <p className="text-xs text-slate-500 font-medium tracking-wide flex items-center space-x-1">
-              <span>Nagpur Flood Command Center</span>
+              <span>Nagpur Real-Time Flood Command Center</span>
             </p>
           </div>
         </div>
