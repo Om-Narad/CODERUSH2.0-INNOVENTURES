@@ -9,6 +9,7 @@ import {
   Siren,
   LogOut,
   User,
+  Box,
 } from 'lucide-react';
 
 export default function Navbar() {
@@ -52,8 +53,8 @@ export default function Navbar() {
           </div>
         </div>
 
-        {/* View Switcher Tabs (Dashboard | Map View | SOS Alerts) */}
-        <nav className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-inner">
+        {/* View Switcher Tabs (Dashboard | Map View | 3D Architecture | SOS Alerts) */}
+        <nav className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-inner space-x-1">
           {/* Dashboard */}
           <button
             id="nav-dashboard-btn"
@@ -80,6 +81,20 @@ export default function Navbar() {
           >
             <MapPin className="w-3.5 h-3.5" />
             <span>Map View</span>
+          </button>
+
+          {/* 3D Architecture */}
+          <button
+            id="nav-architecture-btn"
+            onClick={() => setCurrentView('architecture')}
+            className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 cursor-pointer ${
+              currentView === 'architecture'
+                ? 'bg-slate-900 text-cyan-400 border border-cyan-500/50 shadow-md font-bold'
+                : 'text-slate-600 hover:text-cyan-600 hover:bg-white/60'
+            }`}
+          >
+            <Box className="w-3.5 h-3.5 text-cyan-500" />
+            <span className="font-semibold">3D Architecture</span>
           </button>
 
           {/* SOS Alerts Tab */}

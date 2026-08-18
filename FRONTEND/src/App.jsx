@@ -4,6 +4,7 @@ import Navbar from './components/Navbar';
 import DashboardView from './components/DashboardView';
 import FullMapView from './components/FullMapView';
 import SOSAlertsPanel from './components/SOSAlertsPanel';
+import Architecture3DView from './components/Architecture3DView';
 import AuthPage from './components/auth/AuthPage';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 
@@ -73,6 +74,7 @@ function MainContent() {
             <FullMapView />
           </MapErrorBoundary>
         )}
+        {currentView === 'architecture' && <Architecture3DView />}
         {currentView === 'sos' && <SOSAlertsPanel />}
       </main>
     </div>
