@@ -128,7 +128,10 @@ function buildMapStyle(styleType) {
       },
       terrain: {
         type: 'raster-dem',
-        tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+        tiles: [
+          '/dem-tiles/{z}/{x}/{y}.png',
+          '/api/dem/tile/{z}/{x}/{y}.png'
+        ],
         tileSize: 256,
         encoding: 'terrarium',
         maxzoom: 14,

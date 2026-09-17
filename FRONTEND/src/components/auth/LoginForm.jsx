@@ -64,12 +64,6 @@ export default function LoginForm({ onSwitchToSignup, onSuccess }) {
     }, 1200);
   };
 
-  const handleDemoFill = () => {
-    setEmail('officer.nagpur@sentinelplan.gov.in');
-    setPassword('Nagpur2026#Command');
-    setErrors({});
-  };
-
   return (
     <div className="bg-white rounded-2xl shadow-xl shadow-slate-900/5 border border-slate-200/90 p-6 sm:p-8 backdrop-blur-xs relative overflow-hidden">
       
@@ -86,21 +80,7 @@ export default function LoginForm({ onSwitchToSignup, onSuccess }) {
         </p>
       </div>
 
-      {/* Demo Credentials Quick-Fill Banner */}
-      <div className="mb-5 p-2.5 bg-cyan-50/70 border border-cyan-200/80 rounded-xl flex items-center justify-between">
-        <div className="flex items-center space-x-2 text-xs text-cyan-900">
-          <ShieldCheck className="w-4 h-4 text-cyan-600 flex-shrink-0" />
-          <span className="font-medium hidden sm:inline">Demo officer account (Nagpur NMC Command)</span>
-          <span className="font-medium sm:hidden">Fill demo officer account</span>
-        </div>
-        <button
-          type="button"
-          onClick={handleDemoFill}
-          className="text-xs font-bold text-cyan-700 hover:text-cyan-900 underline underline-offset-2 cursor-pointer flex-shrink-0 ml-2"
-        >
-          Auto-fill
-        </button>
-      </div>
+
 
       {/* Success Notification */}
       {successMsg && (

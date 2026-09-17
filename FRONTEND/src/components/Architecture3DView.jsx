@@ -804,10 +804,23 @@ export default function Architecture3DView() {
       renderer.render(scene, camera);
     };
 
+    const resizeObserver = new ResizeObserver(() => {
+      if (!mountRef.current || !rendererRef.current || !cameraRef.current) return;
+      const w = mountRef.current.clientWidth;
+      const h = mountRef.current.clientHeight;
+      if (w > 0 && h > 0) {
+        cameraRef.current.aspect = w / h;
+        cameraRef.current.updateProjectionMatrix();
+        rendererRef.current.setSize(w, h);
+      }
+    });
+    resizeObserver.observe(container);
+
     animate();
 
     return () => {
       cancelAnimationFrame(animationFrameId);
+      resizeObserver.disconnect();
       window.removeEventListener('resize', handleResize);
       renderer.domElement.removeEventListener('pointerdown', handlePointerDown);
       if (container.contains(renderer.domElement)) {

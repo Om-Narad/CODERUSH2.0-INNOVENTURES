@@ -99,20 +99,20 @@ function roadsToGeoJSON(roads) {
   };
 }
 
-// 3D MapLibre Style Builders
+// 3D MapLibre Style Builders with Copernicus 30m DEM
 function get3DMapStyle(styleType) {
   let rasterTiles = ['https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'];
-  let attribution = '© CartoDB Voyager, OpenStreetMap';
+  let attribution = '© CartoDB Voyager, Copernicus DEM 30m';
 
   if (styleType === 'satellite-3d') {
     rasterTiles = ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'];
-    attribution = '© Esri World Imagery';
+    attribution = '© Esri World Imagery, Copernicus DEM 30m';
   } else if (styleType === 'tactical-dark') {
     rasterTiles = ['https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'];
-    attribution = '© CartoDB Dark';
+    attribution = '© CartoDB Dark, Copernicus DEM 30m';
   } else if (styleType === 'vector-light') {
     rasterTiles = ['https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'];
-    attribution = '© CartoDB Positron';
+    attribution = '© CartoDB Positron, Copernicus DEM 30m';
   }
 
   return {
@@ -128,7 +128,10 @@ function get3DMapStyle(styleType) {
       },
       'terrain-dem': {
         type: 'raster-dem',
-        tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+        tiles: [
+          '/dem-tiles/{z}/{x}/{y}.png',
+          '/api/dem/tile/{z}/{x}/{y}.png'
+        ],
         tileSize: 256,
         encoding: 'terrarium',
         maxzoom: 14,
@@ -179,6 +182,7 @@ export default function Nagpur3DMap({ height = '520px' }) {
   const [pitch, setPitch] = useState(55);
   const [bearing, setBearing] = useState(-15);
   const [surgeLevel, setSurgeLevel] = useState(1.4);
+  const [demExaggeration, setDemExaggeration] = useState(2.5);
   const [show3dBuildings, setShow3dBuildings] = useState(true);
   const [showRivers, setShowRivers] = useState(true);
   const [hoveredFeature, setHoveredFeature] = useState(null);
@@ -352,13 +356,16 @@ export default function Nagpur3DMap({ height = '520px' }) {
     };
   }, [mapMode, mapStyle, surgeLevel, show3dBuildings, showRivers]);
 
-  // Update pitch/bearing dynamically
+  // Update pitch/bearing/terrain exaggeration dynamically
   useEffect(() => {
     if (mapRef.current) {
       mapRef.current.setPitch(pitch);
       mapRef.current.setBearing(bearing);
+      try {
+        mapRef.current.setTerrain({ source: 'terrain-dem', exaggeration: demExaggeration });
+      } catch (e) {}
     }
-  }, [pitch, bearing]);
+  }, [pitch, bearing, demExaggeration]);
 
   return (
     <div className="relative w-full rounded-2xl overflow-hidden border border-slate-200 shadow-md bg-slate-900 font-sans" style={{ height }}>
@@ -393,6 +400,16 @@ export default function Nagpur3DMap({ height = '520px' }) {
             <MapPin className="w-3.5 h-3.5 text-cyan-600" />
             <span>2D Detailed Map</span>
           </button>
+        </div>
+
+        {/* DEM Status Badge */}
+        <div className="pointer-events-auto hidden md:flex items-center space-x-2 bg-slate-950/90 backdrop-blur-md border border-emerald-500/40 rounded-xl px-3 py-1.5 shadow-lg text-xs text-emerald-300">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          <span className="font-bold font-mono tracking-wide">Copernicus 30m DEM Active</span>
+          <span className="text-[10px] text-emerald-400/80 font-mono">(265.8m – 399.4m Elev)</span>
         </div>
 
         {/* Right Base Map Style Selector */}
@@ -593,6 +610,23 @@ export default function Nagpur3DMap({ height = '520px' }) {
               >
                 <RotateCcw className="w-3.5 h-3.5" />
               </button>
+            </div>
+
+            <div className="w-px h-4 bg-slate-800" />
+
+            <div className="flex items-center space-x-1.5">
+              <Layers className="w-4 h-4 text-emerald-400" />
+              <span>3D Terrain Height: <strong className="text-emerald-300">{demExaggeration.toFixed(1)}x</strong></span>
+              <input
+                type="range"
+                min="0.5"
+                max="5.0"
+                step="0.1"
+                value={demExaggeration}
+                onChange={(e) => setDemExaggeration(Number(e.target.value))}
+                className="w-20 accent-emerald-500 cursor-pointer"
+                title="Adjust Copernicus 30m DEM Terrain Elevation Exaggeration"
+              />
             </div>
           </div>
 

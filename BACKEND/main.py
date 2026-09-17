@@ -17,6 +17,7 @@ from typing import Optional, Dict, List
 from models import Zone, Road, Alert, Stats, AssignSquadRequest, PredictionResponse, RegionInfo
 from scoring import calculate_priority, generate_rationale
 from regions import REGIONS_METADATA, MULTI_REGION_DATA, fetch_gdacs_live_flood_alerts
+from dem_api import router as dem_router
 
 # ─── ML Model (flood_resnet18.pth) & PyTorch Initialization ────────────────────
 _flood_model = None
@@ -92,6 +93,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(dem_router)
 
 # ─── Nagpur In-Memory State Repository ───────────────────────────────────────
 REGION_STATES: Dict[str, Dict] = {}

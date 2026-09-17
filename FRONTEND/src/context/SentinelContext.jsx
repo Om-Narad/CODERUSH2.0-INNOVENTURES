@@ -15,6 +15,9 @@ const API_URL = (() => {
     console.log('[SentinelPlan] API_URL resolved from VITE_API_URL:', url);
     return url;
   }
+  if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    return 'http://127.0.0.1:8000';
+  }
   return 'https://coderush2-0-innoventures.onrender.com';
 })();
 
