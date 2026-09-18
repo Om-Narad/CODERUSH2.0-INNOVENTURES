@@ -22,7 +22,7 @@ function getPasswordStrength(pwd) {
  * SignupForm component for registering new disaster response personnel for Nagpur.
  */
 export default function SignupForm({ onSwitchToLogin, onSuccess }) {
-  const { login } = useSentinel();
+  const { signupWithSupabase } = useSentinel();
   const [formData, setFormData] = useState({
     fullName: '',
     orgName: 'Nagpur Municipal Corporation (NMC)',
@@ -34,6 +34,7 @@ export default function SignupForm({ onSwitchToLogin, onSuccess }) {
   });
 
   const [errors, setErrors] = useState({});
+  const [authError, setAuthError] = useState('');
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
 
@@ -65,8 +66,8 @@ export default function SignupForm({ onSwitchToLogin, onSuccess }) {
 
     if (!formData.password) {
       newErrors.password = 'Password is required';
-    } else if (formData.password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters';
+    } else if (formData.password.length < 6) {
+      newErrors.password = 'Password must be at least 6 characters';
     }
 
     if (formData.confirmPassword !== formData.password) {
@@ -81,30 +82,42 @@ export default function SignupForm({ onSwitchToLogin, onSuccess }) {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setSuccessMsg('');
+    setAuthError('');
     if (!validateForm()) return;
 
     setLoading(true);
 
-    setTimeout(() => {
-      setLoading(false);
-      setSuccessMsg('Account created successfully! Logging into Nagpur Command Center...');
-      const userObj = {
-        name: formData.fullName,
+    try {
+      const res = await signupWithSupabase({
         email: formData.email,
+        password: formData.password,
+        fullName: formData.fullName,
+        orgName: formData.orgName,
         role: formData.role,
-        org: formData.orgName,
-      };
-      setTimeout(() => {
+      });
+
+      setLoading(false);
+
+      if (!res.success) {
+        setAuthError(res.error || 'Account creation failed. Please try again.');
+        return;
+      }
+
+      if (res.requiresConfirmation) {
+        setSuccessMsg('Account registered successfully! Please check your email address to confirm your account before logging in.');
+      } else {
+        setSuccessMsg('Account created successfully! Logging into Nagpur Command Center...');
         if (onSuccess) {
-          onSuccess(userObj);
-        } else {
-          login(userObj);
+          onSuccess(res.user);
         }
-      }, 1000);
-    }, 1400);
+      }
+    } catch (err) {
+      setLoading(false);
+      setAuthError(err.message || 'An unexpected error occurred during signup');
+    }
   };
 
   return (
@@ -123,11 +136,25 @@ export default function SignupForm({ onSwitchToLogin, onSuccess }) {
         </p>
       </div>
 
+      {/* Auth Error Banner */}
+      {authError && (
+        <div className="mb-5 p-3.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs font-medium flex items-start space-x-2.5 animate-fadeIn">
+          <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <strong className="block font-bold text-rose-900">Registration Failed</strong>
+            <span>{authError}</span>
+          </div>
+        </div>
+      )}
+
       {/* Success Banner */}
       {successMsg && (
-        <div className="mb-5 p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-medium flex items-center space-x-2 animate-fadeIn">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-          <span>{successMsg}</span>
+        <div className="mb-5 p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-medium flex items-start space-x-2 animate-fadeIn">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <strong className="block font-bold text-emerald-900">Registration Status</strong>
+            <span>{successMsg}</span>
+          </div>
         </div>
       )}
 

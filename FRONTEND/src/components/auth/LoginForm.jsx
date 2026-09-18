@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Mail, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { Mail, ArrowRight, ShieldCheck, CheckCircle2, AlertCircle } from 'lucide-react';
 import TextInput from './TextInput';
 import PasswordInput from './PasswordInput';
 import PrimaryButton from './PrimaryButton';
@@ -7,22 +7,23 @@ import { useSentinel } from '../../context/SentinelContext';
 
 /**
  * LoginForm component for SentinelPlan Nagpur disaster response officers.
- * Includes inline validation, show/hide password, SSO, and demo auto-fill.
+ * Includes inline validation, show/hide password, and Supabase authentication.
  */
 export default function LoginForm({ onSwitchToSignup, onSuccess }) {
-  const { login } = useSentinel();
+  const { loginWithSupabase, login } = useSentinel();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [authError, setAuthError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
   // Validate form fields
   const validateForm = () => {
     const newErrors = {};
     if (!email.trim()) {
-      newErrors.email = 'Official Email or Username is required';
+      newErrors.email = 'Official Email is required';
     } else if (email.includes('@') && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       newErrors.email = 'Please enter a valid email address';
     }
@@ -37,31 +38,31 @@ export default function LoginForm({ onSwitchToSignup, onSuccess }) {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setSuccessMsg('');
+    setAuthError('');
     if (!validateForm()) return;
 
     setLoading(true);
 
-    // Simulate authentication API request
-    setTimeout(() => {
+    try {
+      const res = await loginWithSupabase(email, password);
       setLoading(false);
+
+      if (!res.success) {
+        setAuthError(res.error || 'Authentication failed. Please check your credentials.');
+        return;
+      }
+
       setSuccessMsg('Authentication successful! Directing to Nagpur Command Center...');
-      const userData = {
-        name: 'Commander Rajesh Sharma',
-        email: email || 'officer.nagpur@sentinelplan.gov.in',
-        role: 'Nagpur Disaster Response Officer',
-        org: 'Nagpur Municipal Corporation (NMC)',
-      };
-      setTimeout(() => {
-        if (onSuccess) {
-          onSuccess(userData);
-        } else {
-          login(userData);
-        }
-      }, 1000);
-    }, 1200);
+      if (onSuccess) {
+        onSuccess(res.user);
+      }
+    } catch (err) {
+      setLoading(false);
+      setAuthError(err.message || 'An unexpected error occurred during login');
+    }
   };
 
   return (
@@ -80,7 +81,16 @@ export default function LoginForm({ onSwitchToSignup, onSuccess }) {
         </p>
       </div>
 
-
+      {/* Auth Error Banner */}
+      {authError && (
+        <div className="mb-5 p-3.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs font-medium flex items-start space-x-2.5 animate-fadeIn">
+          <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <strong className="block font-bold text-rose-900">Sign in Failed</strong>
+            <span>{authError}</span>
+          </div>
+        </div>
+      )}
 
       {/* Success Notification */}
       {successMsg && (

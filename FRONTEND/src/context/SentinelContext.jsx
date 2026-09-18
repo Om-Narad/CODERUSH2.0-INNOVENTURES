@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import { supabase } from '../lib/supabase';
 import {
   INITIAL_ZONES,
   INITIAL_ROADS,
@@ -119,24 +120,155 @@ export function computeZonePriority(zone, roadsList) {
 }
 
 export function SentinelProvider({ children }) {
-  // Authentication State
-  const [user, setUser] = useState(() => {
-    try {
-      const saved = localStorage.getItem('sentinel_user');
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
+  // Authentication State with Supabase
+  const [user, setUser] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [currentView, setCurrentView] = useState('login');
+
+  // Helper to format Supabase user object into application user schema
+  const formatUserObject = useCallback((sbUser) => {
+    if (!sbUser) return null;
+    const meta = sbUser.user_metadata || {};
+    return {
+      id: sbUser.id,
+      email: sbUser.email,
+      name: meta.full_name || sbUser.email.split('@')[0],
+      role: meta.role || 'Nagpur Disaster Response Officer',
+      org: meta.org_name || 'Nagpur Municipal Corporation (NMC)',
+    };
+  }, []);
+
+  // Initialize Supabase Auth session & setup listener
+  useEffect(() => {
+    let mounted = true;
+
+    async function initAuth() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (mounted) {
+          if (session?.user) {
+            const formatted = formatUserObject(session.user);
+            setUser(formatted);
+            setIsAuthenticated(true);
+            setCurrentView((prev) => (prev === 'login' || prev === 'signup' ? 'dashboard' : prev));
+          } else {
+            setUser(null);
+            setIsAuthenticated(false);
+            setCurrentView('login');
+          }
+        }
+      } catch (err) {
+        console.error('[SentinelPlan] Supabase auth getSession error:', err);
+      } finally {
+        if (mounted) setAuthLoading(false);
+      }
     }
-  });
 
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    return !!localStorage.getItem('sentinel_token');
-  });
+    initAuth();
 
-  // Current view defaults to login if unauthenticated, dashboard if logged in
-  const [currentView, setCurrentView] = useState(() => {
-    return localStorage.getItem('sentinel_token') ? 'dashboard' : 'login';
-  });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (mounted) {
+        if (session?.user) {
+          const formatted = formatUserObject(session.user);
+          setUser(formatted);
+          setIsAuthenticated(true);
+          setCurrentView((prev) => (prev === 'login' || prev === 'signup' ? 'dashboard' : prev));
+        } else {
+          setUser(null);
+          setIsAuthenticated(false);
+          setCurrentView('login');
+        }
+        setAuthLoading(false);
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription?.unsubscribe();
+    };
+  }, [formatUserObject]);
+
+  // Supabase Login Handler
+  const loginWithSupabase = useCallback(async (email, password) => {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      const formatted = formatUserObject(data.user);
+      setUser(formatted);
+      setIsAuthenticated(true);
+      setCurrentView('dashboard');
+      return { success: true, user: formatted };
+    } catch (err) {
+      return { success: false, error: err.message || 'An unexpected error occurred during login' };
+    }
+  }, [formatUserObject]);
+
+  // Supabase Signup Handler
+  const signupWithSupabase = useCallback(async ({ email, password, fullName, orgName, role }) => {
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          data: {
+            full_name: fullName.trim(),
+            org_name: orgName.trim(),
+            role: role,
+          }
+        }
+      });
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      // Record officer details into database officers table
+      try {
+        await supabase.from('officers').upsert([{
+          email: email.trim(),
+          full_name: fullName.trim(),
+          org_name: orgName.trim(),
+          role: role,
+        }], { onConflict: 'email' });
+      } catch (insertErr) {
+        console.warn('[SentinelPlan] Notice on officers table insert:', insertErr.message);
+      }
+
+      const requiresConfirmation = !data.session && !!data.user;
+      if (data.session && data.user) {
+        const formatted = formatUserObject(data.user);
+        setUser(formatted);
+        setIsAuthenticated(true);
+        setCurrentView('dashboard');
+        return { success: true, user: formatted, requiresConfirmation: false };
+      }
+
+      return { success: true, user: data.user, requiresConfirmation: true };
+    } catch (err) {
+      return { success: false, error: err.message || 'An unexpected error occurred during account creation' };
+    }
+  }, [formatUserObject]);
+
+  // Supabase Logout Handler
+  const logoutWithSupabase = useCallback(async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.warn('[SentinelPlan] Supabase signOut error:', err.message);
+    } finally {
+      setUser(null);
+      setIsAuthenticated(false);
+      setCurrentView('login');
+    }
+  }, []);
 
   // Default Region: Exclusive to Nagpur (Maharashtra, India)
   const [currentRegionId, setCurrentRegionId] = useState('nagpur');
@@ -173,30 +305,6 @@ export function SentinelProvider({ children }) {
   // SOS Alert System State
   const [sosAlerts, setSosAlerts] = useState([]);
   const [sosNotification, setSosNotification] = useState(null);
-
-  // Login handler
-  const login = useCallback((userData) => {
-    const userObj = userData || {
-      name: 'Commander Rajesh Sharma',
-      email: 'officer.nagpur@sentinelplan.gov.in',
-      role: 'Nagpur Disaster Response Officer',
-      org: 'Nagpur Municipal Corporation (NMC)',
-    };
-    setUser(userObj);
-    setIsAuthenticated(true);
-    localStorage.setItem('sentinel_user', JSON.stringify(userObj));
-    localStorage.setItem('sentinel_token', 'token_nagpur_' + Date.now());
-    setCurrentView('dashboard');
-  }, []);
-
-  // Logout handler
-  const logout = useCallback(() => {
-    setUser(null);
-    setIsAuthenticated(false);
-    localStorage.removeItem('sentinel_user');
-    localStorage.removeItem('sentinel_token');
-    setCurrentView('login');
-  }, []);
 
   // Protect view switching
   const setProtectedView = useCallback((view) => {
@@ -473,8 +581,12 @@ export function SentinelProvider({ children }) {
       value={{
         user,
         isAuthenticated,
-        login,
-        logout,
+        authLoading,
+        login: loginWithSupabase,
+        logout: logoutWithSupabase,
+        loginWithSupabase,
+        signupWithSupabase,
+        logoutWithSupabase,
         currentView,
         setCurrentView: setProtectedView,
         currentRegionId,

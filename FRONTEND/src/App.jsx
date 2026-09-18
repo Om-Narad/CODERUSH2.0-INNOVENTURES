@@ -51,14 +51,25 @@ class MapErrorBoundary extends React.Component {
 }
 
 function MainContent() {
-  const { currentView, setCurrentView, isAuthenticated, login } = useSentinel();
+  const { currentView, setCurrentView, isAuthenticated, authLoading } = useSentinel();
 
-  // Simple Protection: If not logged in, force Login / Signup page
+  // Loading indicator while resolving Supabase session
+  if (authLoading) {
+    return (
+      <div className="h-screen bg-slate-900 text-cyan-400 flex flex-col items-center justify-center space-y-4">
+        <div className="w-12 h-12 border-4 border-cyan-500/30 border-t-cyan-400 rounded-full animate-spin" />
+        <div className="text-sm font-semibold tracking-wider uppercase text-slate-300">
+          Connecting to Nagpur Flood Command Center...
+        </div>
+      </div>
+    );
+  }
+
+  // Strict Protection: If not authenticated, force AuthPage (Login / Signup)
   if (!isAuthenticated || currentView === 'login' || currentView === 'signup') {
     return (
       <AuthPage
         initialMode={currentView === 'signup' ? 'signup' : 'login'}
-        onLoginSuccess={(user) => login(user)}
         onGoToDashboard={isAuthenticated ? () => setCurrentView('dashboard') : null}
       />
     );
