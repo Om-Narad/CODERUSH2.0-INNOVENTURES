@@ -192,13 +192,20 @@ export function SentinelProvider({ children }) {
   // Supabase Login Handler
   const loginWithSupabase = useCallback(async (email, password) => {
     try {
+      const cleanEmail = (email || '').trim().toLowerCase();
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
+        email: cleanEmail,
         password,
       });
 
       if (error) {
-        return { success: false, error: error.message };
+        let msg = error.message;
+        if (msg.includes('Invalid login credentials') || error.status === 400) {
+          msg = 'Invalid email address or password. Please check your credentials.';
+        } else if (msg.includes('Email not confirmed')) {
+          msg = 'Your email address has not been confirmed yet. Please check your inbox.';
+        }
+        return { success: false, error: msg };
       }
 
       const formatted = formatUserObject(data.user);
@@ -214,29 +221,38 @@ export function SentinelProvider({ children }) {
   // Supabase Signup Handler
   const signupWithSupabase = useCallback(async ({ email, password, fullName, orgName, role }) => {
     try {
+      const cleanEmail = (email || '').trim().toLowerCase();
       const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
+        email: cleanEmail,
         password,
         options: {
           data: {
-            full_name: fullName.trim(),
-            org_name: orgName.trim(),
-            role: role,
+            full_name: (fullName || '').trim(),
+            org_name: (orgName || '').trim(),
+            role: role || 'Nagpur Disaster Officer',
           }
         }
       });
 
       if (error) {
-        return { success: false, error: error.message };
+        let msg = error.message;
+        if (msg.includes('User already registered') || msg.includes('already exists')) {
+          msg = 'An officer account with this email address already exists. Please sign in instead.';
+        } else if (msg.includes('Password should be at least')) {
+          msg = 'Password must be at least 6 characters long.';
+        } else if (msg.includes('invalid')) {
+          msg = 'Please enter a valid official email address (e.g. name@gmail.com).';
+        }
+        return { success: false, error: msg };
       }
 
       // Record officer details into database officers table
       try {
         await supabase.from('officers').upsert([{
-          email: email.trim(),
-          full_name: fullName.trim(),
-          org_name: orgName.trim(),
-          role: role,
+          email: cleanEmail,
+          full_name: (fullName || '').trim(),
+          org_name: (orgName || '').trim(),
+          role: role || 'Nagpur Disaster Officer',
         }], { onConflict: 'email' });
       } catch (insertErr) {
         console.warn('[SentinelPlan] Notice on officers table insert:', insertErr.message);
