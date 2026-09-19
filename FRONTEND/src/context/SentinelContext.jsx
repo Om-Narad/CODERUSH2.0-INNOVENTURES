@@ -193,19 +193,34 @@ export function SentinelProvider({ children }) {
   const loginWithSupabase = useCallback(async (email, password) => {
     try {
       const cleanEmail = (email || '').trim().toLowerCase();
+      const cleanPassword = (password || '').trim();
+
+      if (!cleanEmail || !cleanPassword) {
+        return { success: false, error: 'Please provide both your official email and password.' };
+      }
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
-        password,
+        password: cleanPassword,
       });
 
       if (error) {
-        let msg = error.message;
-        if (msg.includes('Invalid login credentials') || error.status === 400) {
+        console.error('[SentinelPlan Auth] signInWithPassword error:', error);
+        let msg = error.message || 'Authentication failed';
+        
+        if (msg.includes('Invalid login credentials') || msg.includes('invalid_credentials')) {
           msg = 'Invalid email address or password. Please check your credentials.';
         } else if (msg.includes('Email not confirmed')) {
-          msg = 'Your email address has not been confirmed yet. Please check your inbox.';
+          msg = 'Your email address has not been confirmed yet. Please check your inbox for the confirmation email.';
+        } else if (msg.includes('Invalid path') || msg.includes('not found') || error.status === 404) {
+          msg = 'Supabase API path error. Please ensure VITE_SUPABASE_URL points to project root (e.g. https://xyz.supabase.co).';
         }
+        
         return { success: false, error: msg };
+      }
+
+      if (!data?.user) {
+        return { success: false, error: 'Login attempt returned empty session data.' };
       }
 
       const formatted = formatUserObject(data.user);
@@ -214,7 +229,8 @@ export function SentinelProvider({ children }) {
       setCurrentView('dashboard');
       return { success: true, user: formatted };
     } catch (err) {
-      return { success: false, error: err.message || 'An unexpected error occurred during login' };
+      console.error('[SentinelPlan Auth] Login unexpected error:', err);
+      return { success: false, error: err.message || 'An unexpected error occurred during login.' };
     }
   }, [formatUserObject]);
 
@@ -222,10 +238,16 @@ export function SentinelProvider({ children }) {
   const signupWithSupabase = useCallback(async ({ email, password, fullName, orgName, role }) => {
     try {
       const cleanEmail = (email || '').trim().toLowerCase();
+      const cleanPassword = (password || '').trim();
+
+      // Dynamic redirect URL for confirmation email callback (works on localhost & live Vercel domain)
+      const redirectUrl = typeof window !== 'undefined' ? window.location.origin : undefined;
+
       const { data, error } = await supabase.auth.signUp({
         email: cleanEmail,
-        password,
+        password: cleanPassword,
         options: {
+          emailRedirectTo: redirectUrl,
           data: {
             full_name: (fullName || '').trim(),
             org_name: (orgName || '').trim(),
@@ -235,27 +257,34 @@ export function SentinelProvider({ children }) {
       });
 
       if (error) {
-        let msg = error.message;
+        console.error('[SentinelPlan Auth] signUp error:', error);
+        let msg = error.message || 'Registration failed';
+        
         if (msg.includes('User already registered') || msg.includes('already exists')) {
           msg = 'An officer account with this email address already exists. Please sign in instead.';
         } else if (msg.includes('Password should be at least')) {
           msg = 'Password must be at least 6 characters long.';
-        } else if (msg.includes('invalid')) {
-          msg = 'Please enter a valid official email address (e.g. name@gmail.com).';
+        } else if (msg.includes('invalid') && msg.includes('email')) {
+          msg = 'Please enter a valid official email address.';
+        } else if (msg.includes('Invalid path') || msg.includes('not found') || error.status === 404) {
+          msg = 'Supabase API path error. Please ensure VITE_SUPABASE_URL points to project root.';
         }
+        
         return { success: false, error: msg };
       }
 
-      // Record officer details into database officers table
-      try {
-        await supabase.from('officers').upsert([{
-          email: cleanEmail,
-          full_name: (fullName || '').trim(),
-          org_name: (orgName || '').trim(),
-          role: role || 'Nagpur Disaster Officer',
-        }], { onConflict: 'email' });
-      } catch (insertErr) {
-        console.warn('[SentinelPlan] Notice on officers table insert:', insertErr.message);
+      // Record officer details into database officers table if present
+      if (data?.user) {
+        try {
+          await supabase.from('officers').upsert([{
+            email: cleanEmail,
+            full_name: (fullName || '').trim(),
+            org_name: (orgName || '').trim(),
+            role: role || 'Nagpur Disaster Officer',
+          }], { onConflict: 'email' });
+        } catch (insertErr) {
+          console.warn('[SentinelPlan] Notice on officers table insert:', insertErr.message);
+        }
       }
 
       const requiresConfirmation = !data.session && !!data.user;
@@ -269,6 +298,7 @@ export function SentinelProvider({ children }) {
 
       return { success: true, user: data.user, requiresConfirmation: true };
     } catch (err) {
+      console.error('[SentinelPlan Auth] Signup unexpected error:', err);
       return { success: false, error: err.message || 'An unexpected error occurred during account creation' };
     }
   }, [formatUserObject]);
