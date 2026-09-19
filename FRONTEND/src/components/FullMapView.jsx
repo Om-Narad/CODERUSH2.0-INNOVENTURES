@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { MapContainer, TileLayer, Polygon, Polyline, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Polygon, Polyline, Popup, Marker, useMap } from 'react-leaflet';
+import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 import { useSentinel } from '../context/SentinelContext';
 import PriorityActionFeed from './PriorityActionFeed';
-import { DENSITY_HEATMAP_POINTS, NAGPUR_RIVERS } from '../data/mockData';
+import { DENSITY_HEATMAP_POINTS, NAGPUR_RIVERS, NAGPUR_AREA_LABELS, NAGPUR_DEM_INFO } from '../data/mockData';
 import {
   AlertTriangle,
   PanelRightClose,
@@ -24,6 +25,45 @@ import {
   Check,
   Maximize2
 } from 'lucide-react';
+
+// Custom Leaflet Area Name Label Icon Builder
+const createAreaLabelIcon = (name, category) => {
+  return L.divIcon({
+    className: 'nagpur-area-label-badge',
+    html: `
+      <div style="
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        background: rgba(15, 23, 42, 0.92);
+        color: #ffffff;
+        border: 1.5px solid rgba(56, 189, 248, 0.7);
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-family: system-ui, -apple-system, sans-serif;
+        font-size: 11px;
+        font-weight: 700;
+        white-space: nowrap;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+        backdrop-filter: blur(6px);
+        transform: translate(-50%, -50%);
+        pointer-events: auto;
+      ">
+        <span style="
+          width: 7px;
+          height: 7px;
+          border-radius: 50%;
+          background: #38bdf8;
+          box-shadow: 0 0 8px #38bdf8;
+          flex-shrink: 0;
+        "></span>
+        <span style="letter-spacing: 0.3px;">${name}</span>
+      </div>
+    `,
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+  });
+};
 
 // ─── GeoJSON Helpers ──────────────────────────────────────────────────────────
 
@@ -100,24 +140,13 @@ function riversToGeoJSON(rivers) {
 
 // ─── MapLibre Style Definition ────────────────────────────────────────────────
 
-function buildMapStyle(styleType) {
-  let rasterTiles = ['https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'];
-  let attribution = '© CartoDB Voyager, OpenStreetMap';
-
-  if (styleType === 'satellite') {
-    rasterTiles = ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'];
-    attribution = '© Esri World Imagery';
-  } else if (styleType === 'dark') {
-    rasterTiles = ['https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'];
-    attribution = '© CartoDB Dark';
-  } else if (styleType === 'light') {
-    rasterTiles = ['https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'];
-    attribution = '© CartoDB Positron';
-  }
+function buildMapStyle() {
+  const rasterTiles = ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'];
+  const attribution = '© Esri World Imagery, Copernicus DEM 30m OpenTopography';
 
   return {
     version: 8,
-    name: 'Nagpur Flood Safe 3D',
+    name: 'Nagpur Flood Safe 3D Photorealistic',
     sources: {
       'base-tiles': {
         type: 'raster',
@@ -126,11 +155,17 @@ function buildMapStyle(styleType) {
         attribution,
         maxzoom: 19,
       },
+      'label-tiles': {
+        type: 'raster',
+        tiles: ['https://a.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png'],
+        tileSize: 256,
+        maxzoom: 19,
+      },
       terrain: {
         type: 'raster-dem',
         tiles: [
-          '/dem-tiles/{z}/{x}/{y}.png',
-          '/api/dem/tile/{z}/{x}/{y}.png'
+          '/api/dem/tile/{z}/{x}/{y}.png',
+          '/dem-tiles/{z}/{x}/{y}.png'
         ],
         tileSize: 256,
         encoding: 'terrarium',
@@ -142,6 +177,13 @@ function buildMapStyle(styleType) {
         id: 'base-raster',
         type: 'raster',
         source: 'base-tiles',
+        minzoom: 0,
+        maxzoom: 22,
+      },
+      {
+        id: 'labels-raster',
+        type: 'raster',
+        source: 'label-tiles',
         minzoom: 0,
         maxzoom: 22,
       },
@@ -240,7 +282,38 @@ export default function FullMapView() {
 
       map.on('load', () => {
         try {
-          map.setTerrain({ source: 'terrain', exaggeration: 2.2 });
+          map.setTerrain({ source: 'terrain', exaggeration: 2.5 });
+
+          // Add Nagpur Area Name Markers on 3D Map
+          NAGPUR_AREA_LABELS.forEach((area) => {
+            const el = document.createElement('div');
+            el.className = 'nagpur-3d-area-pill';
+            el.style.cssText = `
+              display: flex;
+              align-items: center;
+              gap: 5px;
+              background: rgba(15, 23, 42, 0.92);
+              color: #ffffff;
+              border: 1.5px solid rgba(56, 189, 248, 0.7);
+              padding: 3px 9px;
+              border-radius: 20px;
+              font-family: system-ui, -apple-system, sans-serif;
+              font-size: 11px;
+              font-weight: 700;
+              white-space: nowrap;
+              box-shadow: 0 4px 14px rgba(0,0,0,0.6);
+              backdrop-filter: blur(4px);
+              cursor: pointer;
+            `;
+            el.innerHTML = `
+              <span style="width: 6px; height: 6px; border-radius: 50%; background: #38bdf8; box-shadow: 0 0 6px #38bdf8;"></span>
+              <span>${area.name}</span>
+            `;
+
+            new maplibregl.Marker({ element: el })
+              .setLngLat([area.lng, area.lat])
+              .addTo(map);
+          });
 
           // 1. Add Zone Hazard Polygons
           map.addSource('zones', { type: 'geojson', data: zonesToGeoJSON(zones) });
@@ -334,7 +407,7 @@ export default function FullMapView() {
         mapRef.current = null;
       }
     };
-  }, [mapMode, baseStyle, showZones, showRoads, showRivers]);
+  }, [mapMode, showZones, showRoads, showRivers]);
 
   return (
     <div className="flex-1 flex flex-col md:flex-row h-full overflow-hidden bg-slate-900 text-slate-100 font-sans relative">
@@ -372,34 +445,14 @@ export default function FullMapView() {
             </button>
           </div>
 
-          {/* Base Map Style Selector */}
-          <div className="pointer-events-auto hidden sm:flex items-center space-x-1 bg-slate-950/90 backdrop-blur-md border border-slate-800 rounded-2xl p-1.5 shadow-2xl text-xs font-medium">
-            <button
-              onClick={() => setBaseStyle('google-streets')}
-              className={`px-3 py-1.5 rounded-xl transition-all ${
-                baseStyle === 'google-streets' ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-400/40' : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              🗺️ Google Streets
-            </button>
-
-            <button
-              onClick={() => setBaseStyle('satellite')}
-              className={`px-3 py-1.5 rounded-xl transition-all ${
-                baseStyle === 'satellite' ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-400/40' : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              🛰️ Satellite Hybrid
-            </button>
-
-            <button
-              onClick={() => setBaseStyle('dark')}
-              className={`px-3 py-1.5 rounded-xl transition-all ${
-                baseStyle === 'dark' ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-400/40' : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              🕶️ Dark Mode
-            </button>
+          {/* DEM Elevation Badge */}
+          <div className="pointer-events-auto hidden sm:flex items-center space-x-2 bg-slate-950/90 backdrop-blur-md border border-emerald-500/40 rounded-2xl px-3.5 py-1.5 shadow-2xl text-xs text-emerald-300">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span className="font-bold font-mono tracking-wide">Copernicus 30m DEM Active</span>
+            <span className="text-[10px] text-emerald-400/90 font-mono">(265.8m – 399.4m Elev)</span>
           </div>
 
           {/* Layer Overlay Toggles */}
@@ -444,18 +497,34 @@ export default function FullMapView() {
 
             {/* Base Tile Layer */}
             <TileLayer
-              url={get2DTileUrl()}
+              url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
               attribution="© CartoDB Voyager, OpenStreetMap contributors"
               maxZoom={19}
             />
 
-            {baseStyle === 'satellite' && (
-              <TileLayer
-                url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png"
-                attribution="© CartoDB Labels"
-                maxZoom={19}
-              />
-            )}
+            {/* Street & Area Labels Overlay */}
+            <TileLayer
+              url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png"
+              attribution="© CartoDB Labels"
+              maxZoom={19}
+            />
+
+            {/* Render Major Nagpur Area Labels */}
+            {NAGPUR_AREA_LABELS.map((area) => (
+              <Marker
+                key={area.id}
+                position={[area.lat, area.lng]}
+                icon={createAreaLabelIcon(area.name, area.category)}
+              >
+                <Popup>
+                  <div className="font-sans text-xs p-0.5">
+                    <strong className="text-slate-900 text-sm">{area.name}</strong>
+                    <div className="text-cyan-700 font-semibold mt-0.5">{area.category}</div>
+                    <div className="text-slate-500 text-[11px]">Nagpur City Sector</div>
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
 
             {/* Zones Overlay */}
             {showZones &&

@@ -325,3 +325,33 @@ export const DENSITY_HEATMAP_POINTS = [
   { lat: 21.178, lng: 79.068, intensity: 0.82, label: 'Gorewada Nullah Mankapur Inundation' },
   { lat: 21.082, lng: 79.052, intensity: 0.60, label: 'MIHAN / Wardha Road Arterial Water Level' },
 ];
+
+// Major Nagpur Areas / Landmarks for prominent label display across 2D & 3D maps
+export const NAGPUR_AREA_LABELS = [
+  { id: 'area-civil-lines', name: 'Civil Lines', lat: 21.1535, lng: 79.0680, category: 'Administrative Hub', type: 'major' },
+  { id: 'area-dharampeth', name: 'Dharampeth', lat: 21.1430, lng: 79.0620, category: 'Commercial Sector', type: 'major' },
+  { id: 'area-sadar', name: 'Sadar', lat: 21.1620, lng: 79.0800, category: 'Central Market', type: 'major' },
+  { id: 'area-mahal', name: 'Mahal', lat: 21.1460, lng: 79.1020, category: 'Historic Core', type: 'major' },
+  { id: 'area-itwari', name: 'Itwari', lat: 21.1540, lng: 79.1120, category: 'Trade Center', type: 'major' },
+  { id: 'area-manewada', name: 'Manewada', lat: 21.1080, lng: 79.0950, category: 'South Residential', type: 'major' },
+  { id: 'area-sitabuldi', name: 'Sitabuldi', lat: 21.1470, lng: 79.0830, category: 'Civic Interchange', type: 'major' },
+  { id: 'area-lakadganj', name: 'Lakadganj', lat: 21.1520, lng: 79.1240, category: 'East Industrial', type: 'major' },
+  { id: 'area-wardhaman', name: 'Wardhaman Nagar', lat: 21.1450, lng: 79.1350, category: 'East Commercial', type: 'major' },
+  { id: 'area-pardi', name: 'Pardi', lat: 21.1480, lng: 79.1550, category: 'East Suburb', type: 'major' },
+  { id: 'area-mankapur', name: 'Mankapur', lat: 21.1850, lng: 79.0720, category: 'North Ring Sector', type: 'major' },
+  { id: 'area-sonegaon', name: 'Sonegaon', lat: 21.0920, lng: 79.0620, category: 'Airport & Lake Zone', type: 'major' },
+  { id: 'area-trimurti', name: 'Trimurti Nagar', lat: 21.1180, lng: 79.0480, category: 'West Sector', type: 'major' },
+  { id: 'area-nandanvan', name: 'Nandanvan', lat: 21.1270, lng: 79.1220, category: 'South-East Hub', type: 'major' },
+];
+
+// OpenTopography Copernicus 30m DEM Metadata
+export const NAGPUR_DEM_INFO = {
+  dataset: 'Copernicus 30m DEM (COP30)',
+  source: 'OpenTopography',
+  minElevation: 265.8, // meters
+  maxElevation: 399.4, // meters
+  meanElevation: 304.6, // meters
+  resolutionMeters: 30.9,
+  center: [21.1289, 79.0890],
+};
+

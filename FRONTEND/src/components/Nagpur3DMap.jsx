@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useSentinel } from '../context/SentinelContext';
-import { MapContainer, TileLayer, Polygon, Polyline, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Polygon, Polyline, Popup, Marker, useMap } from 'react-leaflet';
+import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { NAGPUR_RIVERS } from '../data/mockData';
+import { NAGPUR_RIVERS, NAGPUR_AREA_LABELS, NAGPUR_DEM_INFO } from '../data/mockData';
 import {
   Layers,
   Box,
@@ -21,6 +22,45 @@ import {
   Moon,
   Compass
 } from 'lucide-react';
+
+// Custom Leaflet Area Name Label Icon Builder
+const createAreaLabelIcon = (name, category) => {
+  return L.divIcon({
+    className: 'nagpur-area-label-badge',
+    html: `
+      <div style="
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        background: rgba(15, 23, 42, 0.92);
+        color: #ffffff;
+        border: 1.5px solid rgba(56, 189, 248, 0.7);
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-family: system-ui, -apple-system, sans-serif;
+        font-size: 11px;
+        font-weight: 700;
+        white-space: nowrap;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+        backdrop-filter: blur(6px);
+        transform: translate(-50%, -50%);
+        pointer-events: auto;
+      ">
+        <span style="
+          width: 7px;
+          height: 7px;
+          border-radius: 50%;
+          background: #38bdf8;
+          box-shadow: 0 0 8px #38bdf8;
+          flex-shrink: 0;
+        "></span>
+        <span style="letter-spacing: 0.3px;">${name}</span>
+      </div>
+    `,
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+  });
+};
 
 // GeoJSON formatting helpers for 3D MapLibre layers
 function zonesToGeoJSON(zones, surgeLevel) {
@@ -100,24 +140,13 @@ function roadsToGeoJSON(roads) {
 }
 
 // 3D MapLibre Style Builders with Copernicus 30m DEM
-function get3DMapStyle(styleType) {
-  let rasterTiles = ['https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'];
-  let attribution = '© CartoDB Voyager, Copernicus DEM 30m';
-
-  if (styleType === 'satellite-3d') {
-    rasterTiles = ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'];
-    attribution = '© Esri World Imagery, Copernicus DEM 30m';
-  } else if (styleType === 'tactical-dark') {
-    rasterTiles = ['https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'];
-    attribution = '© CartoDB Dark, Copernicus DEM 30m';
-  } else if (styleType === 'vector-light') {
-    rasterTiles = ['https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'];
-    attribution = '© CartoDB Positron, Copernicus DEM 30m';
-  }
+function get3DMapStyle() {
+  const rasterTiles = ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'];
+  const attribution = '© Esri World Imagery, Copernicus DEM 30m OpenTopography';
 
   return {
     version: 8,
-    name: `Nagpur 3D - ${styleType}`,
+    name: 'Nagpur 3D Photorealistic',
     sources: {
       'base-tiles': {
         type: 'raster',
@@ -126,11 +155,17 @@ function get3DMapStyle(styleType) {
         attribution,
         maxzoom: 19,
       },
+      'label-tiles': {
+        type: 'raster',
+        tiles: ['https://a.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png'],
+        tileSize: 256,
+        maxzoom: 19,
+      },
       'terrain-dem': {
         type: 'raster-dem',
         tiles: [
-          '/dem-tiles/{z}/{x}/{y}.png',
-          '/api/dem/tile/{z}/{x}/{y}.png'
+          '/api/dem/tile/{z}/{x}/{y}.png',
+          '/dem-tiles/{z}/{x}/{y}.png'
         ],
         tileSize: 256,
         encoding: 'terrarium',
@@ -142,6 +177,13 @@ function get3DMapStyle(styleType) {
         id: 'base-layer',
         type: 'raster',
         source: 'base-tiles',
+        minzoom: 0,
+        maxzoom: 22,
+      },
+      {
+        id: 'labels-layer',
+        type: 'raster',
+        source: 'label-tiles',
         minzoom: 0,
         maxzoom: 22,
       },
@@ -178,33 +220,15 @@ export default function Nagpur3DMap({ height = '520px' }) {
 
   // Map State & Controls
   const [mapMode, setMapMode] = useState('3d'); // '3d' | '2d'
-  const [mapStyle, setMapStyle] = useState('google-streets'); // 'google-streets' | 'satellite-3d' | 'tactical-dark' | 'vector-light'
   const [pitch, setPitch] = useState(55);
   const [bearing, setBearing] = useState(-15);
   const [surgeLevel, setSurgeLevel] = useState(1.4);
   const [demExaggeration, setDemExaggeration] = useState(2.5);
   const [show3dBuildings, setShow3dBuildings] = useState(true);
   const [showRivers, setShowRivers] = useState(true);
-  const [hoveredFeature, setHoveredFeature] = useState(null);
 
   const containerRef = useRef(null);
   const mapRef = useRef(null);
-
-  // Tile layer mapping for 2D Leaflet Google Maps style
-  const get2DTileUrl = () => {
-    switch (mapStyle) {
-      case 'satellite-3d':
-        return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
-      case 'tactical-dark':
-        return 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-      case 'vector-light':
-        return 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
-      case 'google-streets':
-      default:
-        // High detail CartoDB Voyager Google Maps style with vivid roads & street labels
-        return 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
-    }
-  };
 
   // Initialize MapLibre 3D WebGL Canvas
   useEffect(() => {
@@ -219,7 +243,7 @@ export default function Nagpur3DMap({ height = '520px' }) {
 
       const map = new maplibregl.Map({
         container: containerRef.current,
-        style: get3DMapStyle(mapStyle),
+        style: get3DMapStyle(),
         center: [nagpurCenter[1], nagpurCenter[0]],
         zoom: 12.4,
         pitch: pitch,
@@ -234,8 +258,39 @@ export default function Nagpur3DMap({ height = '520px' }) {
 
       map.on('load', () => {
         try {
-          // Terrain Elevation exaggeration
-          map.setTerrain({ source: 'terrain-dem', exaggeration: 2.2 });
+          // Terrain Elevation exaggeration using Copernicus 30m DEM
+          map.setTerrain({ source: 'terrain-dem', exaggeration: demExaggeration });
+
+          // Add Nagpur Area Name Markers on 3D Map
+          NAGPUR_AREA_LABELS.forEach((area) => {
+            const el = document.createElement('div');
+            el.className = 'nagpur-3d-area-pill';
+            el.style.cssText = `
+              display: flex;
+              align-items: center;
+              gap: 5px;
+              background: rgba(15, 23, 42, 0.92);
+              color: #ffffff;
+              border: 1.5px solid rgba(56, 189, 248, 0.7);
+              padding: 3px 9px;
+              border-radius: 20px;
+              font-family: system-ui, -apple-system, sans-serif;
+              font-size: 11px;
+              font-weight: 700;
+              white-space: nowrap;
+              box-shadow: 0 4px 14px rgba(0,0,0,0.6);
+              backdrop-filter: blur(4px);
+              cursor: pointer;
+            `;
+            el.innerHTML = `
+              <span style="width: 6px; height: 6px; border-radius: 50%; background: #38bdf8; box-shadow: 0 0 6px #38bdf8;"></span>
+              <span>${area.name}</span>
+            `;
+
+            new maplibregl.Marker({ element: el })
+              .setLngLat([area.lng, area.lat])
+              .addTo(map);
+          });
 
           // 1. Add Zone Hazard Polygons
           map.addSource('zones-3d', {
@@ -354,7 +409,7 @@ export default function Nagpur3DMap({ height = '520px' }) {
         mapRef.current = null;
       }
     };
-  }, [mapMode, mapStyle, surgeLevel, show3dBuildings, showRivers]);
+  }, [mapMode, surgeLevel, show3dBuildings, showRivers]);
 
   // Update pitch/bearing/terrain exaggeration dynamically
   useEffect(() => {
@@ -388,7 +443,7 @@ export default function Nagpur3DMap({ height = '520px' }) {
             <span>3D Photorealistic</span>
           </button>
 
-          {/* 2D Google-Style Button */}
+          {/* 2D Detailed Map Button */}
           <button
             onClick={() => setMapMode('2d')}
             className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
@@ -402,48 +457,16 @@ export default function Nagpur3DMap({ height = '520px' }) {
           </button>
         </div>
 
-        {/* DEM Status Badge */}
-        <div className="pointer-events-auto hidden md:flex items-center space-x-2 bg-slate-950/90 backdrop-blur-md border border-emerald-500/40 rounded-xl px-3 py-1.5 shadow-lg text-xs text-emerald-300">
+        {/* DEM Elevation Status Badge */}
+        <div className="pointer-events-auto flex items-center space-x-2 bg-slate-950/90 backdrop-blur-md border border-emerald-500/40 rounded-xl px-3.5 py-1.5 shadow-lg text-xs text-emerald-300">
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
           </span>
           <span className="font-bold font-mono tracking-wide">Copernicus 30m DEM Active</span>
-          <span className="text-[10px] text-emerald-400/80 font-mono">(265.8m – 399.4m Elev)</span>
+          <span className="text-[10px] text-emerald-400/90 font-mono">(265.8m – 399.4m Elev)</span>
         </div>
 
-        {/* Right Base Map Style Selector */}
-        <div className="pointer-events-auto flex items-center space-x-1 bg-slate-950/85 backdrop-blur-md border border-slate-800 rounded-xl p-1 shadow-lg text-xs">
-          <button
-            onClick={() => setMapStyle('google-streets')}
-            className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
-              mapStyle === 'google-streets' ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-400/40' : 'text-slate-400 hover:text-slate-200'
-            }`}
-            title="Google Maps Style Streets with Road Names"
-          >
-            🗺️ Google Streets
-          </button>
-
-          <button
-            onClick={() => setMapStyle('satellite-3d')}
-            className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
-              mapStyle === 'satellite-3d' ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-400/40' : 'text-slate-400 hover:text-slate-200'
-            }`}
-            title="Esri Photorealistic Satellite Hybrid"
-          >
-            🛰️ Satellite
-          </button>
-
-          <button
-            onClick={() => setMapStyle('tactical-dark')}
-            className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
-              mapStyle === 'tactical-dark' ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-400/40' : 'text-slate-400 hover:text-slate-200'
-            }`}
-            title="Dark Command Tactical View"
-          >
-            🕶️ Dark Mode
-          </button>
-        </div>
       </div>
 
       {/* ─── 3D Map View Container ─────────────────────────────────────────── */}
@@ -451,7 +474,7 @@ export default function Nagpur3DMap({ height = '520px' }) {
         <div ref={containerRef} className="w-full h-full relative" />
       )}
 
-      {/* ─── 2D Leaflet Map Container (Google Maps High Detail Style) ───────── */}
+      {/* ─── 2D Leaflet Map Container ───────────────────────────────────────── */}
       {mapMode === '2d' && (
         <MapContainer
           center={nagpurCenter}
@@ -463,19 +486,34 @@ export default function Nagpur3DMap({ height = '520px' }) {
 
           {/* High Detail Basemap Tile Layer */}
           <TileLayer
-            url={get2DTileUrl()}
+            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
             attribution="© CartoDB Voyager, OpenStreetMap contributors"
             maxZoom={19}
           />
 
-          {/* Satellite Labels Overlay if Satellite style selected */}
-          {mapStyle === 'satellite-3d' && (
-            <TileLayer
-              url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png"
-              attribution="© CartoDB Labels"
-              maxZoom={19}
-            />
-          )}
+          {/* Street & Area Labels Overlay */}
+          <TileLayer
+            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png"
+            attribution="© CartoDB Labels"
+            maxZoom={19}
+          />
+
+          {/* Render Major Nagpur Area Labels */}
+          {NAGPUR_AREA_LABELS.map((area) => (
+            <Marker
+              key={area.id}
+              position={[area.lat, area.lng]}
+              icon={createAreaLabelIcon(area.name, area.category)}
+            >
+              <Popup>
+                <div className="font-sans text-xs p-0.5">
+                  <strong className="text-slate-900 text-sm">{area.name}</strong>
+                  <div className="text-cyan-700 font-semibold mt-0.5">{area.category}</div>
+                  <div className="text-slate-500 text-[11px]">Nagpur City Sector</div>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
 
           {/* Render Nagpur Flood Risk Polygons */}
           {zones.map((zone) => {
