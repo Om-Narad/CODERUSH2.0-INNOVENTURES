@@ -5,7 +5,7 @@ Provides bulk IoT ingestion, time-series history, human-in-the-loop verification
 fleet health analytics, and WebSocket broadcast streaming for Nagpur.
 """
 
-from fastapi import APIRouter, HTTPException, Query, BackgroundTask, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Query, BackgroundTasks, WebSocket, WebSocketDisconnect
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta
 import asyncio
@@ -78,7 +78,7 @@ manager = ConnectionManager()
 
 # ─── 1. BULK IOT INGESTION ENDPOINT ───────────────────────────────────────────
 @router.post("/sensors/ingest")
-async def ingest_sensor_readings(batch: BatchIngestRequest, background_tasks: BackgroundTask = None):
+async def ingest_sensor_readings(batch: BatchIngestRequest, background_tasks: BackgroundTasks = None):
     """
     Bulk ingestion endpoint for batched IoT water-level & flow sensors.
     Validates payloads, rejects impossible values, updates device state, and triggers blockage rules.

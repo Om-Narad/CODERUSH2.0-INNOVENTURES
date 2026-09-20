@@ -86,12 +86,25 @@ app = FastAPI(
     version="2.0.0"
 )
 
-# Enable CORS for all origins (Required for frontend hackathon integration)
+# Configure CORS origins securely (supports Vercel deployments & local development)
+allowed_origins_env = os.environ.get("ALLOWED_ORIGINS")
+if allowed_origins_env:
+    cors_origins = [o.strip() for o in allowed_origins_env.split(",") if o.strip()]
+else:
+    cors_origins = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://coderush2-0-innoventures.onrender.com",
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -106,42 +119,70 @@ def get_current_iso_timestamp() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 def seed_region_state(region_id: str = "nagpur"):
-    """Initializes in-memory Python structures for Nagpur flood response."""
-    r_data = MULTI_REGION_DATA.get("nagpur", MULTI_REGION_DATA["nagpur"])
+    """Initializes in-memory Python structures for Nagpur flood response safely."""
+    target_key = (region_id or "nagpur").lower()
+    r_data = MULTI_REGION_DATA.get(target_key, MULTI_REGION_DATA.get("nagpur", {}))
 
-    roads = [Road(**r) for r in r_data["roads"]]
-    stats = Stats(**r_data["stats"])
-    alerts = [Alert(**a) for a in r_data["alerts"]]
+    roads = []
+    for r in r_data.get("roads", []):
+        if isinstance(r, Road):
+            roads.append(r)
+        elif isinstance(r, dict):
+            roads.append(Road(**r))
+
+    raw_stats = r_data.get("stats", {})
+    if isinstance(raw_stats, Stats):
+        stats = raw_stats
+    elif isinstance(raw_stats, dict):
+        stats = Stats(**raw_stats)
+    else:
+        stats = Stats()
+
+    alerts = []
+    for a in r_data.get("alerts", []):
+        if isinstance(a, Alert):
+            alerts.append(a)
+        elif isinstance(a, dict):
+            alerts.append(Alert(**a))
 
     zones = []
-    for zd in r_data["zones"]:
-        temp_zone = Zone(
-            id=zd["id"],
-            name=zd["name"],
-            geometry=zd["geometry"],
-            people_exposed=zd["people_exposed"],
-            priority_score=0,
-            status=zd["status"],
-            assigned_squad=zd["assigned_squad"],
-            assigned_shelter=zd["assigned_shelter"],
-            rationale=""
-        )
+    for zd in r_data.get("zones", []):
+        if isinstance(zd, Zone):
+            temp_zone = zd
+        elif isinstance(zd, dict):
+            temp_zone = Zone(
+                id=zd["id"],
+                name=zd["name"],
+                geometry=zd["geometry"],
+                people_exposed=zd.get("people_exposed", 1000),
+                priority_score=0,
+                status=zd.get("status", "pending"),
+                assigned_squad=zd.get("assigned_squad"),
+                assigned_shelter=zd.get("assigned_shelter", "Central Relief Hub"),
+                rationale=""
+            )
+        else:
+            continue
         temp_zone.priority_score = calculate_priority(temp_zone, roads)
         temp_zone.rationale = generate_rationale(temp_zone, roads)
         zones.append(temp_zone)
 
-    REGION_STATES["nagpur"] = {
+    REGION_STATES[target_key] = {
         "roads": roads,
         "zones": zones,
         "alerts": alerts,
         "stats": stats
     }
-    return REGION_STATES["nagpur"]
+    if "nagpur" not in REGION_STATES:
+        REGION_STATES["nagpur"] = REGION_STATES[target_key]
+
+    return REGION_STATES[target_key]
 
 def get_region_data(region_id: str = "nagpur"):
-    if "nagpur" not in REGION_STATES:
-        seed_region_state("nagpur")
-    return REGION_STATES["nagpur"]
+    target_key = (region_id or "nagpur").lower()
+    if target_key not in REGION_STATES:
+        seed_region_state(target_key)
+    return REGION_STATES.get(target_key, REGION_STATES.get("nagpur"))
 
 
 @app.on_event("startup")

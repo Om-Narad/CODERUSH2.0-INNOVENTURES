@@ -66,8 +66,8 @@ export default function SignupForm({ onSwitchToLogin, onSuccess }) {
 
     if (!formData.password) {
       newErrors.password = 'Password is required';
-    } else if (formData.password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
+    } else if (formData.password.length < 8) {
+      newErrors.password = 'Password must be at least 8 characters long';
     }
 
     if (formData.confirmPassword !== formData.password) {
