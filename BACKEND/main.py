@@ -18,6 +18,7 @@ from models import Zone, Road, Alert, Stats, AssignSquadRequest, PredictionRespo
 from scoring import calculate_priority, generate_rationale
 from regions import REGIONS_METADATA, MULTI_REGION_DATA, fetch_gdacs_live_flood_alerts
 from dem_api import router as dem_router
+from drainage_router import router as drainage_router
 
 # ─── ML Model (flood_resnet18.pth) & PyTorch Initialization ────────────────────
 _flood_model = None
@@ -95,6 +96,8 @@ app.add_middleware(
 )
 
 app.include_router(dem_router)
+app.include_router(drainage_router)
+
 
 # ─── Nagpur In-Memory State Repository ───────────────────────────────────────
 REGION_STATES: Dict[str, Dict] = {}

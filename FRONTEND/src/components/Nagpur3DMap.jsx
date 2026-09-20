@@ -5,26 +5,42 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { NAGPUR_RIVERS, NAGPUR_AREA_LABELS, NAGPUR_DEM_INFO } from '../data/mockData';
 import {
-  Layers,
+  NAGPUR_RIVERS,
+  NAGPUR_AREA_LABELS,
+  NAGPUR_WATERBODIES,
+  NAGPUR_LANDMARKS,
+  NAGPUR_DEM_INFO,
+} from '../data/mockData';
+import {
   Box,
   Droplet,
   RotateCcw,
   Maximize2,
-  Minimize2,
-  Shield,
-  Activity,
   MapPin,
-  Eye,
+  Compass,
+  Layers,
+  Play,
+  Pause,
+  ArrowUp,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ZoomIn,
+  ZoomOut,
+  Navigation,
+  Info,
+  Building,
+  School,
+  Hospital,
+  Plane,
+  Train,
   Sliders,
-  Sun,
-  Moon,
-  Compass
 } from 'lucide-react';
 
-// Custom Leaflet Area Name Label Icon Builder
-const createAreaLabelIcon = (name, category) => {
+// Custom Leaflet Area Badge Maker
+const createAreaBadgeIcon = (name, category, type) => {
+  const isCritical = type === 'critical';
   return L.divIcon({
     className: 'nagpur-area-label-badge',
     html: `
@@ -32,16 +48,16 @@ const createAreaLabelIcon = (name, category) => {
         display: flex;
         align-items: center;
         gap: 5px;
-        background: rgba(15, 23, 42, 0.92);
+        background: ${isCritical ? 'rgba(225, 29, 72, 0.95)' : 'rgba(15, 23, 42, 0.92)'};
         color: #ffffff;
-        border: 1.5px solid rgba(56, 189, 248, 0.7);
+        border: 1.5px solid ${isCritical ? '#f43f5e' : 'rgba(56, 189, 248, 0.8)'};
         padding: 4px 10px;
         border-radius: 20px;
         font-family: system-ui, -apple-system, sans-serif;
         font-size: 11px;
-        font-weight: 700;
+        font-weight: 800;
         white-space: nowrap;
-        box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+        box-shadow: 0 4px 14px rgba(0,0,0,0.4);
         backdrop-filter: blur(6px);
         transform: translate(-50%, -50%);
         pointer-events: auto;
@@ -50,8 +66,8 @@ const createAreaLabelIcon = (name, category) => {
           width: 7px;
           height: 7px;
           border-radius: 50%;
-          background: #38bdf8;
-          box-shadow: 0 0 8px #38bdf8;
+          background: ${isCritical ? '#ffffff' : '#38bdf8'};
+          box-shadow: 0 0 8px ${isCritical ? '#ffffff' : '#38bdf8'};
           flex-shrink: 0;
         "></span>
         <span style="letter-spacing: 0.3px;">${name}</span>
@@ -62,11 +78,83 @@ const createAreaLabelIcon = (name, category) => {
   });
 };
 
-// GeoJSON formatting helpers for 3D MapLibre layers
+// Custom Landmark Icon Maker
+const createLandmarkIcon = (category) => {
+  let symbol = '📍';
+  let color = '#3b82f6';
+  if (category === 'Hospital') { symbol = '🏥'; color = '#ef4444'; }
+  else if (category === 'Education') { symbol = '🎓'; color = '#8b5cf6'; }
+  else if (category === 'Religious Place') { symbol = '🕉️'; color = '#f59e0b'; }
+  else if (category === 'Imp Landmark') { symbol = '🏛️'; color = '#06b6d4'; }
+
+  return L.divIcon({
+    className: 'nagpur-landmark-badge',
+    html: `
+      <div style="
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #ffffff;
+        border: 2px solid ${color};
+        border-radius: 50%;
+        width: 26px;
+        height: 26px;
+        font-size: 13px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        transform: translate(-50%, -50%);
+      ">
+        ${symbol}
+      </div>
+    `,
+    iconSize: [26, 26],
+    iconAnchor: [13, 13],
+  });
+};
+
+// MapLibre 3D Style Configuration (Free keyless vector/raster tiles)
+function get3DMapStyle() {
+  return {
+    version: 8,
+    name: 'Nagpur 3D Photorealistic',
+    sources: {
+      'esri-satellite': {
+        type: 'raster',
+        tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+        tileSize: 256,
+        maxzoom: 19,
+        attribution: '© Esri Imagery',
+      },
+      'esri-labels': {
+        type: 'raster',
+        tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'],
+        tileSize: 256,
+        maxzoom: 19,
+      },
+    },
+    layers: [
+      {
+        id: 'esri-base',
+        type: 'raster',
+        source: 'esri-satellite',
+        minzoom: 0,
+        maxzoom: 22,
+      },
+      {
+        id: 'esri-labels-layer',
+        type: 'raster',
+        source: 'esri-labels',
+        minzoom: 0,
+        maxzoom: 22,
+      },
+    ],
+  };
+}
+
+// Convert Zones to GeoJSON for 3D Extrusion
 function zonesToGeoJSON(zones, surgeLevel) {
   return {
     type: 'FeatureCollection',
-    features: (zones || []).map(zone => {
+    features: (zones || []).map((zone) => {
       const expansion = (surgeLevel || 0) * 0.0006;
       const coords = (zone.geometry || []).map(([lat, lng], idx) => {
         const dLat = (idx % 2 === 0 ? 1 : -1) * expansion;
@@ -74,7 +162,7 @@ function zonesToGeoJSON(zones, surgeLevel) {
         return [lng + dLng, lat + dLat];
       });
       if (coords.length > 0) {
-        coords.push(coords[0]); // Close ring
+        coords.push(coords[0]);
       }
 
       return {
@@ -86,9 +174,8 @@ function zonesToGeoJSON(zones, surgeLevel) {
           priority: zone.priority,
           severity: zone.severity,
           severityColor: zone.severityColor,
-          housesExposed: zone.housesExposed || Math.round(zone.peopleExposed / 5),
           peopleExposed: zone.peopleExposed,
-          height: 25 + Math.min((zone.priority || 50) * 0.8, 80), // Extrusion height for 3D
+          height: 30 + Math.min((zone.priority || 50) * 0.9, 100),
         },
         geometry: {
           type: 'Polygon',
@@ -99,99 +186,6 @@ function zonesToGeoJSON(zones, surgeLevel) {
   };
 }
 
-function riversToGeoJSON(rivers) {
-  return {
-    type: 'FeatureCollection',
-    features: (rivers || []).map(river => ({
-      type: 'Feature',
-      id: river.id,
-      properties: {
-        id: river.id,
-        name: river.name,
-        color: river.color,
-        waterSurgeMeters: river.waterSurgeMeters,
-      },
-      geometry: {
-        type: 'LineString',
-        coordinates: river.coordinates,
-      },
-    })),
-  };
-}
-
-function roadsToGeoJSON(roads) {
-  return {
-    type: 'FeatureCollection',
-    features: (roads || []).map(road => ({
-      type: 'Feature',
-      id: road.id,
-      properties: {
-        id: road.id,
-        name: road.name,
-        status: road.status,
-        isBlocked: road.status === 'blocked',
-      },
-      geometry: {
-        type: 'LineString',
-        coordinates: (road.geometry || []).map(([lat, lng]) => [lng, lat]),
-      },
-    })),
-  };
-}
-
-// 3D MapLibre Style Builders with Copernicus 30m DEM
-function get3DMapStyle() {
-  const rasterTiles = ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'];
-  const attribution = '© Esri World Imagery, Copernicus DEM 30m OpenTopography';
-
-  return {
-    version: 8,
-    name: 'Nagpur 3D Photorealistic',
-    sources: {
-      'base-tiles': {
-        type: 'raster',
-        tiles: rasterTiles,
-        tileSize: 256,
-        attribution,
-        maxzoom: 19,
-      },
-      'label-tiles': {
-        type: 'raster',
-        tiles: ['https://a.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png'],
-        tileSize: 256,
-        maxzoom: 19,
-      },
-      'terrain-dem': {
-        type: 'raster-dem',
-        tiles: [
-          '/api/dem/tile/{z}/{x}/{y}.png',
-          '/dem-tiles/{z}/{x}/{y}.png'
-        ],
-        tileSize: 256,
-        encoding: 'terrarium',
-        maxzoom: 14,
-      },
-    },
-    layers: [
-      {
-        id: 'base-layer',
-        type: 'raster',
-        source: 'base-tiles',
-        minzoom: 0,
-        maxzoom: 22,
-      },
-      {
-        id: 'labels-layer',
-        type: 'raster',
-        source: 'label-tiles',
-        minzoom: 0,
-        maxzoom: 22,
-      },
-    ],
-  };
-}
-
-// Helper Leaflet Map Auto-Updater
 function LeafletMapAutoUpdater({ center, zoom }) {
   const map = useMap();
   useEffect(() => {
@@ -205,7 +199,7 @@ function LeafletMapAutoUpdater({ center, zoom }) {
   return null;
 }
 
-export default function Nagpur3DMap({ height = '520px' }) {
+export default function Nagpur3DMap({ height = '540px' }) {
   const {
     zones,
     roads,
@@ -218,19 +212,20 @@ export default function Nagpur3DMap({ height = '520px' }) {
 
   const nagpurCenter = currentRegionMeta?.center || [21.1458, 79.0882];
 
-  // Map State & Controls
+  // Map Modes & 3D Orbital Camera Controls
   const [mapMode, setMapMode] = useState('3d'); // '3d' | '2d'
-  const [pitch, setPitch] = useState(55);
-  const [bearing, setBearing] = useState(-15);
-  const [surgeLevel, setSurgeLevel] = useState(1.4);
-  const [demExaggeration, setDemExaggeration] = useState(2.5);
-  const [show3dBuildings, setShow3dBuildings] = useState(true);
-  const [showRivers, setShowRivers] = useState(true);
+  const [pitch, setPitch] = useState(60);
+  const [bearing, setBearing] = useState(-20);
+  const [zoom, setZoom] = useState(13);
+  const [surgeLevel, setSurgeLevel] = useState(1.5);
+  const [isAutoSpinning, setIsAutoSpinning] = useState(false);
+  const [showLegend, setShowLegend] = useState(true);
 
   const containerRef = useRef(null);
   const mapRef = useRef(null);
+  const spinAnimRef = useRef(null);
 
-  // Initialize MapLibre 3D WebGL Canvas
+  // Initialize MapLibre 3D Canvas
   useEffect(() => {
     if (mapMode !== '3d') return;
     if (!containerRef.current) return;
@@ -245,7 +240,7 @@ export default function Nagpur3DMap({ height = '520px' }) {
         container: containerRef.current,
         style: get3DMapStyle(),
         center: [nagpurCenter[1], nagpurCenter[0]],
-        zoom: 12.4,
+        zoom: zoom,
         pitch: pitch,
         bearing: bearing,
         antialias: true,
@@ -254,36 +249,33 @@ export default function Nagpur3DMap({ height = '520px' }) {
       mapRef.current = map;
 
       map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
-      map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
 
       map.on('load', () => {
         try {
-          // Terrain Elevation exaggeration using Copernicus 30m DEM
-          map.setTerrain({ source: 'terrain-dem', exaggeration: demExaggeration });
-
-          // Add Nagpur Area Name Markers on 3D Map
+          // Add 3D Area Name Labels
           NAGPUR_AREA_LABELS.forEach((area) => {
             const el = document.createElement('div');
             el.className = 'nagpur-3d-area-pill';
+            const isCrit = area.type === 'critical';
             el.style.cssText = `
               display: flex;
               align-items: center;
               gap: 5px;
-              background: rgba(15, 23, 42, 0.92);
+              background: ${isCrit ? 'rgba(225, 29, 72, 0.95)' : 'rgba(15, 23, 42, 0.92)'};
               color: #ffffff;
-              border: 1.5px solid rgba(56, 189, 248, 0.7);
+              border: 1.5px solid ${isCrit ? '#f43f5e' : 'rgba(56, 189, 248, 0.8)'};
               padding: 3px 9px;
               border-radius: 20px;
               font-family: system-ui, -apple-system, sans-serif;
               font-size: 11px;
-              font-weight: 700;
+              font-weight: 800;
               white-space: nowrap;
               box-shadow: 0 4px 14px rgba(0,0,0,0.6);
               backdrop-filter: blur(4px);
               cursor: pointer;
             `;
             el.innerHTML = `
-              <span style="width: 6px; height: 6px; border-radius: 50%; background: #38bdf8; box-shadow: 0 0 6px #38bdf8;"></span>
+              <span style="width: 6px; height: 6px; border-radius: 50%; background: ${isCrit ? '#ffffff' : '#38bdf8'};"></span>
               <span>${area.name}</span>
             `;
 
@@ -292,29 +284,26 @@ export default function Nagpur3DMap({ height = '520px' }) {
               .addTo(map);
           });
 
-          // 1. Add Zone Hazard Polygons
+          // 1. Add Zone Extrusions
           map.addSource('zones-3d', {
             type: 'geojson',
             data: zonesToGeoJSON(zones, surgeLevel),
           });
 
-          // 3D Building / Zone Extrusion Layer
           map.addLayer({
             id: 'zones-extrusion',
             type: 'fill-extrusion',
             source: 'zones-3d',
-            layout: { visibility: show3dBuildings ? 'visible' : 'none' },
             paint: {
               'fill-extrusion-color': ['get', 'severityColor'],
               'fill-extrusion-height': ['get', 'height'],
               'fill-extrusion-base': 0,
-              'fill-extrusion-opacity': 0.7,
+              'fill-extrusion-opacity': 0.75,
             },
           });
 
-          // Flat hazard boundary lines
           map.addLayer({
-            id: 'zones-outline',
+            id: 'zones-line',
             type: 'line',
             source: 'zones-3d',
             paint: {
@@ -323,47 +312,7 @@ export default function Nagpur3DMap({ height = '520px' }) {
             },
           });
 
-          // 2. Add Nagpur Rivers Layer
-          map.addSource('rivers-3d', {
-            type: 'geojson',
-            data: riversToGeoJSON(NAGPUR_RIVERS),
-          });
-
-          map.addLayer({
-            id: 'rivers-line',
-            type: 'line',
-            source: 'rivers-3d',
-            layout: { visibility: showRivers ? 'visible' : 'none' },
-            paint: {
-              'line-color': ['get', 'color'],
-              'line-width': 5,
-              'line-blur': 1,
-            },
-          });
-
-          // 3. Add Nagpur Roads Layer
-          map.addSource('roads-3d', {
-            type: 'geojson',
-            data: roadsToGeoJSON(roads),
-          });
-
-          map.addLayer({
-            id: 'roads-line',
-            type: 'line',
-            source: 'roads-3d',
-            paint: {
-              'line-color': [
-                'case',
-                ['get', 'isBlocked'],
-                '#ef4444', // Red for blocked roads
-                '#10b981', // Green for open roads
-              ],
-              'line-width': ['case', ['get', 'isBlocked'], 5, 3.5],
-              'line-dasharray': ['case', ['get', 'isBlocked'], [2, 1], [1, 0]],
-            },
-          });
-
-          // Interactive click popups on 3D zone extrusions
+          // Popup on click
           map.on('click', 'zones-extrusion', (e) => {
             if (e.features && e.features[0]) {
               const props = e.features[0].properties;
@@ -378,19 +327,12 @@ export default function Nagpur3DMap({ height = '520px' }) {
                       Priority Score: ${props.priority} (${props.severity?.toUpperCase()})
                     </span><br/>
                     <span style="font-size: 11px; color: #64748b;">
-                      Exposed Population: ${Number(props.peopleExposed).toLocaleString()} residents
+                      Exposed Population: ${Number(props.peopleExposed).toLocaleString()} evacuees
                     </span>
                   </div>
                 `)
                 .addTo(map);
             }
-          });
-
-          map.on('mouseenter', 'zones-extrusion', () => {
-            map.getCanvas().style.cursor = 'pointer';
-          });
-          map.on('mouseleave', 'zones-extrusion', () => {
-            map.getCanvas().style.cursor = '';
           });
 
         } catch (err) {
@@ -409,31 +351,63 @@ export default function Nagpur3DMap({ height = '520px' }) {
         mapRef.current = null;
       }
     };
-  }, [mapMode, surgeLevel, show3dBuildings, showRivers]);
+  }, [mapMode, surgeLevel]);
 
-  // Update pitch/bearing/terrain exaggeration dynamically
+  // Handle camera pitch / bearing updates
   useEffect(() => {
     if (mapRef.current) {
       mapRef.current.setPitch(pitch);
       mapRef.current.setBearing(bearing);
-      try {
-        mapRef.current.setTerrain({ source: 'terrain-dem', exaggeration: demExaggeration });
-      } catch (e) {}
     }
-  }, [pitch, bearing, demExaggeration]);
+  }, [pitch, bearing]);
+
+  // 360° Auto-Spin Orbit Loop
+  useEffect(() => {
+    if (!isAutoSpinning || mapMode !== '3d') {
+      if (spinAnimRef.current) cancelAnimationFrame(spinAnimRef.current);
+      return;
+    }
+
+    const spin = () => {
+      setBearing((prev) => (prev + 0.3) % 360);
+      spinAnimRef.current = requestAnimationFrame(spin);
+    };
+
+    spinAnimRef.current = requestAnimationFrame(spin);
+    return () => {
+      if (spinAnimRef.current) cancelAnimationFrame(spinAnimRef.current);
+    };
+  }, [isAutoSpinning, mapMode]);
+
+  // Pan Map Camera Helper
+  const panCamera = (dLat, dLng) => {
+    if (mapRef.current) {
+      const c = mapRef.current.getCenter();
+      mapRef.current.panTo([c.lng + dLng, c.lat + dLat]);
+    }
+  };
+
+  // Camera View Presets
+  const applyPreset = (p, b, z) => {
+    setIsAutoSpinning(false);
+    setPitch(p);
+    setBearing(b);
+    if (mapRef.current) {
+      mapRef.current.easeTo({ pitch: p, bearing: b, zoom: z, duration: 1000 });
+    }
+  };
 
   return (
     <div className="relative w-full rounded-2xl overflow-hidden border border-slate-200 shadow-md bg-slate-900 font-sans" style={{ height }}>
       
-      {/* ─── Top Control Toolbar Bar ────────────────────────────────────────── */}
+      {/* ─── Top Control Toolbar ────────────────────────────────────────────── */}
       <div className="absolute top-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
         
-        {/* Left Badge & Mode Switcher */}
-        <div className="pointer-events-auto flex items-center space-x-1.5 bg-slate-950/85 backdrop-blur-md border border-slate-800 rounded-xl p-1 shadow-lg text-xs">
-          {/* 3D Button */}
+        {/* Left 2D / 3D Mode Switcher */}
+        <div className="pointer-events-auto flex items-center space-x-1 bg-slate-950/90 backdrop-blur-md border border-slate-800 rounded-xl p-1 shadow-lg text-xs">
           <button
-            onClick={() => setMapMode('3d')}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+            onClick={() => { setMapMode('3d'); setIsAutoSpinning(false); }}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg font-extrabold transition-all cursor-pointer ${
               mapMode === '3d'
                 ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md shadow-cyan-500/20'
                 : 'text-slate-400 hover:text-slate-200'
@@ -443,12 +417,11 @@ export default function Nagpur3DMap({ height = '520px' }) {
             <span>3D Photorealistic</span>
           </button>
 
-          {/* 2D Detailed Map Button */}
           <button
-            onClick={() => setMapMode('2d')}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+            onClick={() => { setMapMode('2d'); setIsAutoSpinning(false); }}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg font-extrabold transition-all cursor-pointer ${
               mapMode === '2d'
-                ? 'bg-white text-slate-900 shadow-md border border-slate-200'
+                ? 'bg-white text-slate-950 shadow-md'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -457,65 +430,128 @@ export default function Nagpur3DMap({ height = '520px' }) {
           </button>
         </div>
 
-        {/* DEM Elevation Status Badge */}
-        <div className="pointer-events-auto flex items-center space-x-2 bg-slate-950/90 backdrop-blur-md border border-emerald-500/40 rounded-xl px-3.5 py-1.5 shadow-lg text-xs text-emerald-300">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-          </span>
-          <span className="font-bold font-mono tracking-wide">Copernicus 30m DEM Active</span>
-          <span className="text-[10px] text-emerald-400/90 font-mono">(265.8m – 399.4m Elev)</span>
-        </div>
+        {/* 3D Camera Angle Presets & Controls */}
+        {mapMode === '3d' && (
+          <div className="pointer-events-auto flex items-center space-x-1.5 bg-slate-950/90 backdrop-blur-md border border-slate-800 rounded-xl p-1 shadow-lg text-xs text-slate-300">
+            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider px-2">Presets:</span>
+            
+            <button
+              onClick={() => applyPreset(60, -20, 13)}
+              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-cyan-400 rounded-md font-bold transition-all cursor-pointer"
+            >
+              🚁 Drone View
+            </button>
+            <button
+              onClick={() => applyPreset(0, 0, 12.5)}
+              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-md font-bold transition-all cursor-pointer"
+            >
+              🛰️ Satellite Top-Down
+            </button>
+            <button
+              onClick={() => applyPreset(75, 45, 14.8)}
+              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-amber-400 rounded-md font-bold transition-all cursor-pointer"
+            >
+              🏙️ Low Street Angle
+            </button>
 
+            <button
+              onClick={() => setIsAutoSpinning(!isAutoSpinning)}
+              className={`flex items-center space-x-1 px-2.5 py-1 rounded-md font-extrabold transition-all cursor-pointer ${
+                isAutoSpinning
+                  ? 'bg-rose-600 text-white animate-pulse'
+                  : 'bg-cyan-950 text-cyan-400 border border-cyan-800'
+              }`}
+            >
+              {isAutoSpinning ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+              <span>360° Orbit</span>
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* ─── 3D Map View Container ─────────────────────────────────────────── */}
+      {/* ─── 3D Map View ───────────────────────────────────────────────────── */}
       {mapMode === '3d' && (
         <div ref={containerRef} className="w-full h-full relative" />
       )}
 
-      {/* ─── 2D Leaflet Map Container ───────────────────────────────────────── */}
+      {/* ─── 2D Leaflet Map View (Google Maps Style Keyless Tiles) ─────────── */}
       {mapMode === '2d' && (
         <MapContainer
           center={nagpurCenter}
           zoom={12.5}
           scrollWheelZoom={true}
+          attributionControl={false}
           className="w-full h-full z-0"
         >
           <LeafletMapAutoUpdater center={nagpurCenter} zoom={12.5} />
 
-          {/* High Detail Basemap Tile Layer */}
+          {/* Clean Keyless OpenStreetMap Tiles - Watermark Free */}
           <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-            attribution="© CartoDB Voyager, OpenStreetMap contributors"
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             maxZoom={19}
           />
 
-          {/* Street & Area Labels Overlay */}
-          <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png"
-            attribution="© CartoDB Labels"
-            maxZoom={19}
-          />
-
-          {/* Render Major Nagpur Area Labels */}
+          {/* Render Area Label Badges */}
           {NAGPUR_AREA_LABELS.map((area) => (
             <Marker
               key={area.id}
               position={[area.lat, area.lng]}
-              icon={createAreaLabelIcon(area.name, area.category)}
+              icon={createAreaBadgeIcon(area.name, area.category, area.type)}
             >
               <Popup>
                 <div className="font-sans text-xs p-0.5">
                   <strong className="text-slate-900 text-sm">{area.name}</strong>
-                  <div className="text-cyan-700 font-semibold mt-0.5">{area.category}</div>
-                  <div className="text-slate-500 text-[11px]">Nagpur City Sector</div>
+                  <div className="text-cyan-700 font-bold mt-0.5">{area.category}</div>
+                  <div className="text-slate-500 text-[11px]">Nagpur Ward Sector</div>
                 </div>
               </Popup>
             </Marker>
           ))}
 
-          {/* Render Nagpur Flood Risk Polygons */}
+          {/* Render Nagpur Waterbodies (Lakes from Image 1) */}
+          {NAGPUR_WATERBODIES.map((wb) => (
+            <Marker
+              key={wb.id}
+              position={[wb.lat, wb.lng]}
+              icon={L.divIcon({
+                className: 'nagpur-wb-badge',
+                html: `
+                  <div style="
+                    background: #0284c7;
+                    color: #ffffff;
+                    padding: 3px 8px;
+                    border-radius: 12px;
+                    font-size: 11px;
+                    font-weight: 800;
+                    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+                    border: 1px solid #38bdf8;
+                    transform: translate(-50%, -50%);
+                  ">
+                    💧 ${wb.name}
+                  </div>
+                `,
+                iconSize: [0, 0],
+              })}
+            />
+          ))}
+
+          {/* Render Nagpur Landmarks (Hospitals, Colleges, Dargah, Temples) */}
+          {NAGPUR_LANDMARKS.map((lm) => (
+            <Marker
+              key={lm.id}
+              position={[lm.lat, lm.lng]}
+              icon={createLandmarkIcon(lm.category)}
+            >
+              <Popup>
+                <div className="font-sans text-xs p-1">
+                  <strong className="text-slate-900 text-sm">{lm.name}</strong>
+                  <div className="text-purple-700 font-bold mt-0.5">{lm.category}</div>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
+
+          {/* Render Zone Hazard Polygons */}
           {zones.map((zone) => {
             const isSelected = selectedZoneId === zone.id;
             return (
@@ -541,7 +577,6 @@ export default function Nagpur3DMap({ height = '520px' }) {
                       </div>
                       <div>Exposed Population: <strong>{zone.peopleExposed?.toLocaleString()}</strong></div>
                       <div>Assigned Squad: <strong>{zone.assignedSquad}</strong></div>
-                      <div className="text-[11px] text-slate-500 mt-1">{zone.rationale}</div>
                     </div>
                   </div>
                 </Popup>
@@ -549,28 +584,20 @@ export default function Nagpur3DMap({ height = '520px' }) {
             );
           })}
 
-          {/* Render Nagpur Rivers Channels */}
-          {showRivers &&
-            NAGPUR_RIVERS.map((river) => (
-              <Polyline
-                key={river.id}
-                positions={river.coordinates.map(([lng, lat]) => [lat, lng])}
-                pathOptions={{
-                  color: river.color,
-                  weight: 5,
-                  opacity: 0.85,
-                }}
-              >
-                <Popup>
-                  <div className="font-sans text-xs">
-                    <strong>{river.name}</strong><br />
-                    Water Surge: +{river.waterSurgeMeters}m
-                  </div>
-                </Popup>
-              </Polyline>
-            ))}
+          {/* Render River Channels */}
+          {NAGPUR_RIVERS.map((river) => (
+            <Polyline
+              key={river.id}
+              positions={river.coordinates.map(([lng, lat]) => [lat, lng])}
+              pathOptions={{
+                color: river.color,
+                weight: 5,
+                opacity: 0.85,
+              }}
+            />
+          ))}
 
-          {/* Render Nagpur Roads Network */}
+          {/* Render Roads */}
           {roads.map((road) => {
             const isBlocked = road.status === 'blocked';
             return (
@@ -586,104 +613,155 @@ export default function Nagpur3DMap({ height = '520px' }) {
                 eventHandlers={{
                   click: () => toggleRoadStatus(road.id),
                 }}
-              >
-                <Popup>
-                  <div className="font-sans text-xs">
-                    <strong>{road.name}</strong><br />
-                    Type: {road.type}<br />
-                    Status: <span style={{ color: isBlocked ? '#ef4444' : '#10b981', fontWeight: 'bold' }}>
-                      {road.status?.toUpperCase()}
-                    </span><br />
-                    <button
-                      onClick={() => toggleRoadStatus(road.id)}
-                      style={{
-                        marginTop: '4px',
-                        padding: '2px 8px',
-                        background: '#0ea5e9',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontSize: '11px',
-                        fontWeight: 'bold',
-                      }}
-                    >
-                      Toggle Block Status
-                    </button>
-                  </div>
-                </Popup>
-              </Polyline>
+              />
             );
           })}
         </MapContainer>
       )}
 
-      {/* ─── Bottom Floating 3D Controls Dock ────────────────────────────────── */}
-      {mapMode === '3d' && (
-        <div className="absolute bottom-4 left-4 right-4 z-20 pointer-events-none flex flex-wrap items-center justify-between gap-3">
-          
-          {/* Tilt & Rotation Controls */}
-          <div className="pointer-events-auto bg-slate-950/90 backdrop-blur-md border border-slate-800 rounded-xl p-2.5 shadow-xl flex items-center space-x-3 text-xs text-slate-300">
+      {/* ─── Floating Legend Box (Matching Image 1) ─────────────────────── */}
+      <div className="absolute bottom-4 left-4 z-20 bg-slate-950/92 backdrop-blur-md border border-slate-800 rounded-2xl p-3 shadow-2xl text-xs text-slate-200 max-w-xs space-y-2">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+          <span className="font-extrabold text-cyan-400 uppercase tracking-wider text-[11px]">
+            MAP LEGEND
+          </span>
+          <button
+            onClick={() => setShowLegend(!showLegend)}
+            className="text-[10px] text-slate-400 hover:text-white underline cursor-pointer"
+          >
+            {showLegend ? 'Hide' : 'Show'}
+          </button>
+        </div>
+
+        {showLegend && (
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px] font-medium">
             <div className="flex items-center space-x-1.5">
-              <Compass className="w-4 h-4 text-cyan-400" />
-              <span>Tilt: <strong>{pitch}°</strong></span>
-              <input
-                type="range"
-                min="0"
-                max="70"
-                value={pitch}
-                onChange={(e) => setPitch(Number(e.target.value))}
-                className="w-20 accent-cyan-500 cursor-pointer"
-              />
+              <span className="w-3 h-1 bg-amber-500 rounded-full" />
+              <span>Major Road (NH)</span>
             </div>
-
-            <div className="w-px h-4 bg-slate-800" />
-
             <div className="flex items-center space-x-1.5">
-              <span>Rotate: <strong>{bearing}°</strong></span>
-              <button
-                onClick={() => setBearing((prev) => (prev - 45) % 360)}
-                className="p-1 rounded bg-slate-900 border border-slate-700 hover:text-cyan-300 transition-colors"
-                title="Rotate 45°"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-              </button>
+              <span className="w-3 h-1 bg-emerald-500 rounded-full" />
+              <span>Open Arterial</span>
             </div>
-
-            <div className="w-px h-4 bg-slate-800" />
-
             <div className="flex items-center space-x-1.5">
-              <Layers className="w-4 h-4 text-emerald-400" />
-              <span>3D Terrain Height: <strong className="text-emerald-300">{demExaggeration.toFixed(1)}x</strong></span>
-              <input
-                type="range"
-                min="0.5"
-                max="5.0"
-                step="0.1"
-                value={demExaggeration}
-                onChange={(e) => setDemExaggeration(Number(e.target.value))}
-                className="w-20 accent-emerald-500 cursor-pointer"
-                title="Adjust Copernicus 30m DEM Terrain Elevation Exaggeration"
-              />
+              <span className="w-3 h-1 bg-rose-500 rounded-full border border-dashed border-rose-300" />
+              <span>Inundated Road</span>
+            </div>
+            <div className="flex items-center space-x-1.5">
+              <span className="w-3 h-2 bg-sky-500 rounded-xs" />
+              <span>Waterbody / Lake</span>
+            </div>
+            <div className="flex items-center space-x-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+              <span>Critical Risk Zone</span>
+            </div>
+            <div className="flex items-center space-x-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+              <span>Warning Sector</span>
+            </div>
+            <div className="flex items-center space-x-1.5">
+              <span>🏥</span>
+              <span>Hospital / Medical</span>
+            </div>
+            <div className="flex items-center space-x-1.5">
+              <span>🎓</span>
+              <span>College / School</span>
+            </div>
+            <div className="flex items-center space-x-1.5">
+              <span>🕉️</span>
+              <span>Religious Site</span>
+            </div>
+            <div className="flex items-center space-x-1.5">
+              <span>🏛️</span>
+              <span>Imp Landmark</span>
             </div>
           </div>
+        )}
+      </div>
 
-          {/* Flood Surge Simulator Slider */}
-          <div className="pointer-events-auto bg-slate-950/90 backdrop-blur-md border border-slate-800 rounded-xl p-2.5 shadow-xl flex items-center space-x-2 text-xs text-slate-300">
-            <Droplet className="w-4 h-4 text-cyan-400 animate-bounce" />
-            <span className="font-mono text-[11px]">Surge Level: <strong className="text-cyan-300">+{surgeLevel.toFixed(1)}m</strong></span>
-            <input
-              type="range"
-              min="0.5"
-              max="3.5"
-              step="0.1"
-              value={surgeLevel}
-              onChange={(e) => setSurgeLevel(Number(e.target.value))}
-              className="w-24 accent-cyan-500 cursor-pointer"
-            />
+      {/* ─── 3D Orbital Navigation Directional Controller Dock ─────────── */}
+      {mapMode === '3d' && (
+        <div className="absolute bottom-4 right-4 z-20 pointer-events-auto bg-slate-950/92 backdrop-blur-md border border-slate-800 rounded-2xl p-3 shadow-2xl space-y-2 text-xs text-slate-300">
+          <div className="text-[10px] font-extrabold text-cyan-400 uppercase tracking-wider text-center">
+            3D ORBIT &amp; TILT CONTROLS
+          </div>
+
+          <div className="flex items-center justify-center gap-1.5">
+            {/* Directional Pad */}
+            <div className="grid grid-cols-3 gap-1 w-24">
+              <div />
+              <button
+                onClick={() => panCamera(0.005, 0)}
+                className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg flex items-center justify-center cursor-pointer active:scale-95"
+                title="Pan North"
+              >
+                <ArrowUp className="w-3.5 h-3.5" />
+              </button>
+              <div />
+              <button
+                onClick={() => panCamera(0, -0.005)}
+                className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg flex items-center justify-center cursor-pointer active:scale-95"
+                title="Pan West"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => applyPreset(60, -20, 13)}
+                className="p-1 bg-cyan-950 border border-cyan-800 text-cyan-400 rounded-lg flex items-center justify-center text-[10px] font-bold cursor-pointer"
+                title="Center"
+              >
+                Reset
+              </button>
+              <button
+                onClick={() => panCamera(0, 0.005)}
+                className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg flex items-center justify-center cursor-pointer active:scale-95"
+                title="Pan East"
+              >
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+              <div />
+              <button
+                onClick={() => panCamera(-0.005, 0)}
+                className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg flex items-center justify-center cursor-pointer active:scale-95"
+                title="Pan South"
+              >
+                <ArrowDown className="w-3.5 h-3.5" />
+              </button>
+              <div />
+            </div>
+
+            {/* Tilt / Bearing Sliders */}
+            <div className="space-y-2 border-l border-slate-800 pl-3">
+              <div className="flex items-center space-x-1.5">
+                <Compass className="w-3.5 h-3.5 text-cyan-400" />
+                <span className="text-[10px]">Tilt: <strong>{pitch}°</strong></span>
+                <input
+                  type="range"
+                  min="0"
+                  max="85"
+                  value={pitch}
+                  onChange={(e) => setPitch(Number(e.target.value))}
+                  className="w-16 accent-cyan-500 cursor-pointer"
+                />
+              </div>
+
+              <div className="flex items-center space-x-1.5">
+                <RotateCcw className="w-3.5 h-3.5 text-blue-400" />
+                <span className="text-[10px]">Spin: <strong>{bearing}°</strong></span>
+                <input
+                  type="range"
+                  min="0"
+                  max="360"
+                  value={bearing}
+                  onChange={(e) => setBearing(Number(e.target.value))}
+                  className="w-16 accent-blue-500 cursor-pointer"
+                />
+              </div>
+            </div>
           </div>
         </div>
       )}
+
     </div>
   );
 }

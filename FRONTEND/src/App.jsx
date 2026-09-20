@@ -5,6 +5,7 @@ import DashboardView from './components/DashboardView';
 import FullMapView from './components/FullMapView';
 import SOSAlertsPanel from './components/SOSAlertsPanel';
 import Architecture3DView from './components/Architecture3DView';
+import DrainageNetworkView from './components/DrainageNetworkView';
 import AuthPage from './components/auth/AuthPage';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 
@@ -85,6 +86,7 @@ function MainContent() {
             <FullMapView />
           </MapErrorBoundary>
         )}
+        {currentView === 'drainage' && <DrainageNetworkView />}
         {currentView === 'architecture' && <Architecture3DView />}
         {currentView === 'sos' && <SOSAlertsPanel />}
       </main>

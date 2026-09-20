@@ -81,10 +81,11 @@ export default function MiniPreviewMap() {
           attributionControl={false}
           className="h-full w-full pointer-events-none"
         >
-          {/* Light base map tile */}
+          {/* OpenStreetMap base map tile (100% Keyless, No Watermark) */}
           <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-            subdomains="abcd"
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            subdomains={['a', 'b', 'c']}
+            attribution='&copy; OpenStreetMap contributors'
           />
 
           <FitMiniBounds zones={zones} regionMeta={currentRegionMeta} />
